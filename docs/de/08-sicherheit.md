@@ -18,7 +18,7 @@ Sämtliche Verbindungsparameter zu Ihren angebundenen ERP-Systemen (wie Passwör
 
 ## Ausschluss von Telemetrie und Tracking
 
-JaanOS Core enthält **keinerlei Telemetriefunktionen, Call-Home-Verbindungen oder Tracking-Skripte**.
+JaanOS Core enthält **keinerlei Telemetriefunktionen oder Tracking-Skripte** — es werden keine Nutzungs- oder Geschäftsdaten an uns übermittelt. Die einzige regelmäßige ausgehende Verbindung des Stacks ist der Update-Check von Watchtower gegen die öffentliche Container-Registry (kann deaktiviert werden).
 * **Keine Nutzungsdaten:** Es werden keine Statistiken über Ihr Nutzungsverhalten, die Anzahl der Benutzer oder die Auslastung Ihres Systems an JaanIQ übermittelt.
 * **Netzwerk-Transparenz:** Die Anwendung baut nur ausgehende Verbindungen zu den von Ihnen explizit konfigurierten Datenquellen (z. B. Tryton ERP) und den KI-API-Endpunkten auf.
 
@@ -29,6 +29,6 @@ JaanOS Core enthält **keinerlei Telemetriefunktionen, Call-Home-Verbindungen od
 Ein zentraler Sicherheitsaspekt von JaanOS Core betrifft den Schutz Ihrer vertraulichen Finanz- und Kundendaten bei der Verwendung von künstlicher Intelligenz:
 
 * **Bring Your Own Key (BYOK):** Durch die Nutzung Ihrer eigenen API-Schlüssel sind Sie Vertragspartner des jeweiligen KI-Providers.
-* **Kein unbefugtes Training:** Die führenden API-Anbieter (wie Google Vertex AI, Anthropic API, OpenAI API für kommerzielle Zwecke) garantieren in ihren Enterprise-Richtlinien, dass über APIs übermittelte Daten **nicht** zum Trainieren öffentlicher Modelle verwendet werden.
-* **Geografische Kontrolle (EU-Hosting):** Sie können gezielt Provider wählen, die eine Datenverarbeitung innerhalb der Europäischen Union garantieren (z. B. Google Vertex AI mit dem Standort Frankfurt oder Mistral AI mit dem Standort Paris). Dadurch bleibt die DSGVO-Konformität vollständig gewahrt.
-* **100% Offline-Betrieb (Ollama):** Für maximale Datensicherheit können Sie JaanOS Core komplett offline betreiben, indem Sie eine lokale Ollama-Instanz in Ihrem Intranet anbinden. In diesem Fall verlässt kein einziges Byte Ihr internes Netzwerk.
+* **Kein Training durch JaanOS:** JaanOS selbst verwendet Ihre Daten zu keinem Zeitpunkt für KI-Training. Durch BYOK gehen Anfragen ausschließlich an die von Ihnen gewählten Anbieter — deren Umgang mit API-Daten regeln deren jeweilige Nutzungsbedingungen (viele kommerzielle API-Angebote schließen Training auf Kundendaten aus; prüfen Sie die Bedingungen Ihres Anbieters).
+* **Geografische Kontrolle (EU-Hosting):** Sie können gezielt Provider wählen, die eine Datenverarbeitung innerhalb der Europäischen Union garantieren (z. B. Google Vertex AI mit dem Standort Frankfurt oder Mistral AI mit dem Standort Paris). Das unterstützt Sie dabei, die DSGVO-Anforderungen an Drittlandstransfers zu erfüllen.
+* **Lokale KI-Verarbeitung (Ollama):** Für maximale Datensicherheit binden Sie eine lokale Ollama-Instanz in Ihrem Netz an — die KI-Verarbeitung Ihrer Geschäftsdaten bleibt dann vollständig in Ihrem internen Netzwerk. (Hinweis: Für automatische Updates und SSL-Zertifikate benötigt der Server weiterhin Internetzugang, sofern Sie diese Funktionen nicht deaktivieren.)
