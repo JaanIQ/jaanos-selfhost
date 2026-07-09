@@ -67,6 +67,21 @@ Tipp: Automatisieren Sie das Datenbank-Backup per Cronjob (z. B. täglich) und r
 
 ---
 
+## 🗑️ Vollständiges Entfernen (Deinstallation)
+
+Kein Lock-in — auch das Gehen ist nur ein paar Befehle. Möchten Sie Ihre Daten behalten, erstellen Sie **zuerst ein Backup** (siehe oben).
+
+```bash
+cd /opt/jaanos
+docker compose down          # stoppt alle JaanOS-Container (Daten bleiben erhalten)
+docker compose down -v       # stoppt UND löscht die Daten-Volumes (unwiderruflich!)
+cd / && rm -rf /opt/jaanos   # entfernt Konfiguration inkl. .env und Schlüssel
+```
+
+Docker selbst bleibt dabei installiert (wird evtl. von anderen Anwendungen genutzt); bei Bedarf entfernen Sie es über die Paketverwaltung Ihres Systems. Damit ist JaanOS rückstandsfrei vom Server entfernt.
+
+---
+
 ## 📄 EULA & Lizenz
 
 Durch die Installation und Nutzung von JaanOS stimmen Sie den Bedingungen der [EULA.md](EULA.md) zu.
