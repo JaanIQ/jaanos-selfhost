@@ -41,3 +41,30 @@ bash install.sh
 ## 📄 EULA & Lizenz
 
 Durch die Installation und Nutzung von JaanOS stimmen Sie den Bedingungen der [EULA.md](EULA.md) zu.
+
+---
+
+## 📚 Dokumentation / Documentation
+
+Detaillierte Anleitungen für die Einrichtung und Verwaltung von JaanOS Core:
+
+### Deutsch (DE)
+* [01 - Installation & Voraussetzungen](docs/de/01-installation.md)
+* [02 - Erste Schritte & ERP-Anbindung](docs/de/02-erste-schritte.md)
+* [03 - KI-Schlüssel & BYOK](docs/de/03-ki-schluessel.md)
+* [04 - Tägliche Nutzung & Grenzen](docs/de/04-taegliche-nutzung.md)
+* [05 - Updates & Wartung](docs/de/05-updates.md)
+* [06 - Backups & Wiederherstellung](docs/de/06-backup.md)
+* [07 - Fehlerbehebung & Logs](docs/de/07-fehlerbehebung.md)
+* [08 - Sicherheit & Datenschutz](docs/de/08-sicherheit.md)
+
+### English (EN)
+* [01 - Installation & Requirements](docs/en/01-installation.md)
+* [02 - Getting Started & ERP Connection](docs/en/02-erste-schritte.md)
+* [03 - AI Keys & BYOK](docs/en/03-ki-schluessel.md)
+* [04 - Daily Usage & Limitations](docs/en/04-taegliche-nutzung.md)
+* [05 - Updates & Maintenance](docs/en/05-updates.md)
+* [06 - Backup & Restore](docs/en/06-backup.md)
+* [07 - Troubleshooting & Logs](docs/en/07-fehlerbehebung.md)
+* [08 - Security & Privacy](docs/en/08-sicherheit.md)
+
