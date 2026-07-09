@@ -282,16 +282,21 @@ done
 # with the actual chosen port already filled in — completing HTTPS is ONE step,
 # not a reinstall (this installation is full-featured and permanent as-is).
 if [ "$PORT_MODE" = true ]; then
+  # Suggest the free sslip.io name for users without their own domain — it works
+  # through THEIR web server + certbot too (no domain purchase, no DNS setup).
+  SSLIP_SUGGESTION="$(echo "$DOMAIN" | tr '.' '-').sslip.io"
   cat > /opt/jaanos/nginx-jaanos.conf.example <<NGINXEOF
 # JaanOS hinter Ihrem bestehenden nginx (HTTPS macht dann nginx/certbot):
-#   1) Domain unten eintragen (DNS muss auf diesen Server zeigen)
+#   1) Domain unten eintragen (DNS muss auf diesen Server zeigen).
+#      Keine eigene Domain? Ihre kostenlose automatische Adresse funktioniert genauso:
+#      ${SSLIP_SUGGESTION}   (einfach unten als server_name eintragen)
 #   2) sudo cp /opt/jaanos/nginx-jaanos.conf.example /etc/nginx/sites-available/jaanos
 #      sudo ln -s /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
 #   3) sudo nginx -t && sudo systemctl reload nginx
-#   4) sudo certbot --nginx -d jaanos.ihre-domain.de
+#   4) sudo certbot --nginx -d ${SSLIP_SUGGESTION}   (oder Ihre eigene Domain)
 server {
     listen 80;
-    server_name jaanos.ihre-domain.de;
+    server_name ${SSLIP_SUGGESTION};
     location / {
         proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_set_header Host \$host;
