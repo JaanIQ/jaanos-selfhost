@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  jaanos-suite:
+    image: ghcr.io/vibebuild-ai/jaanos/suite:latest
+    container_name: jaanos-suite
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://jaanos:${POSTGRES_PASSWORD}@db:5432/jaanos
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_TRUST_HOST=true
+      - NEXT_PUBLIC_APP_URL=https://${DOMAIN}
+      - AUTH_URL=https://${DOMAIN}/api/auth
+      - NEXT_PUBLIC_DEFAULT_ERP=tryton
+      - NEXT_PUBLIC_LOCK_ERP_CONNECTION=false
+      - HUB_RATE_LIMIT_PER_MIN=600
+    networks:
+      - jaanos-net
+
+  db:
+    image: postgres:16-alpine
+    container_name: jaanos-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=jaanos
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=jaanos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - jaanos-net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: jaanos-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - jaanos-suite
+    networks:
+      - jaanos-net
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  jaanos-net:
+    driver: bridge
