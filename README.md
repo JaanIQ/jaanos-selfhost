@@ -38,6 +38,35 @@ bash install.sh
 
 ---
 
+## 💾 Backups (Ihre Verantwortung)
+
+Beim Self-Hosting liegt die Datensicherung in Ihrer Hand (siehe Nutzungsbedingungen). Zu sichern sind **zwei Dinge** — beide liegen unter `/opt/jaanos`:
+
+1. **Die Datenbank** (alle Verbindungen, Einstellungen, Verlauf):
+
+```bash
+docker exec jaanos-db pg_dump -U jaanos jaanos > /opt/jaanos/backup_$(date +%F).sql
+```
+
+2. **Die `.env`-Datei** (enthält den `ENCRYPTION_KEY`):
+
+```bash
+cp /opt/jaanos/.env /opt/jaanos/env_backup_$(date +%F)
+```
+
+> [!WARNING]
+> **Ohne den originalen `ENCRYPTION_KEY` ist ein Datenbank-Backup nur eingeschränkt nutzbar** — die verschlüsselten Zugangsdaten (ERP-Verbindungen, API-Keys) können dann nicht mehr entschlüsselt werden und müssten neu hinterlegt werden. Sichern Sie `.env` und Datenbank daher immer **zusammen** und bewahren Sie beide an einem sicheren Ort **außerhalb des Servers** auf.
+
+**Wiederherstellung** auf einem frischen Server: Installer ausführen, dann die gesicherte `.env` nach `/opt/jaanos/.env` zurückkopieren, `bash install.sh` erneut ausführen und den SQL-Dump einspielen:
+
+```bash
+docker exec -i jaanos-db psql -U jaanos jaanos < backup_JJJJ-MM-TT.sql
+```
+
+Tipp: Automatisieren Sie das Datenbank-Backup per Cronjob (z. B. täglich) und rotieren Sie alte Dumps.
+
+---
+
 ## 📄 EULA & Lizenz
 
 Durch die Installation und Nutzung von JaanOS stimmen Sie den Bedingungen der [EULA.md](EULA.md) zu.
