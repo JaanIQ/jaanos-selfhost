@@ -19,6 +19,7 @@ services:
       - NEXT_PUBLIC_DEFAULT_ERP=tryton
       - NEXT_PUBLIC_LOCK_ERP_CONNECTION=false
       - HUB_RATE_LIMIT_PER_MIN=600
+      - AUTH_LOCAL_ENABLED=true
     networks:
       - jaanos-net
 
