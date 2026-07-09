@@ -19,6 +19,7 @@ echo "================================================="
 DOMAIN=""
 APP_PORT=""
 PORT_MODE=""
+WITH_TRYTON=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -31,6 +32,14 @@ while [[ $# -gt 0 ]]; do
       APP_PORT="$2"
       PORT_MODE=true
       shift 2
+      ;;
+    --with-tryton)
+      WITH_TRYTON=true
+      shift 1
+      ;;
+    --no-tryton)
+      WITH_TRYTON=false
+      shift 1
       ;;
     *)
       echo -e "${RED}Unknown argument: $1${NC}"
@@ -72,6 +81,18 @@ if [ -z "$PORT_MODE" ]; then
     else
       PORT_MODE=false
       DOMAIN=$(grep -E "^DOMAIN=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    fi
+  fi
+fi
+
+# Respect existing tryton choice if not overridden by CLI flags
+if [ -z "$WITH_TRYTON" ]; then
+  if [ -f .env ]; then
+    EXISTING_TRYTON=$(grep -E "^BUNDLED_TRYTON=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if [ "$EXISTING_TRYTON" = "true" ]; then
+      WITH_TRYTON=true
+    elif [ "$EXISTING_TRYTON" = "false" ]; then
+      WITH_TRYTON=false
     fi
   fi
 fi
@@ -150,14 +171,39 @@ fi
 
 DOMAIN=$(echo "$DOMAIN" | tr -d ' ' | tr -d '"' | tr -d "'")
 
+# 4.5 Ask Tryton question if not resolved
+if [ -z "$WITH_TRYTON" ]; then
+  echo ""
+  echo "Möchten Sie das Komplettpaket mit integriertem Tryton ERP installieren?"
+  echo "Falls Sie schon ein ERP haben (Tryton/Lexware), können Sie auch 'n' wählen und es später verbinden."
+  CHOOSE_TRYTON=$(ask "Integriertes Tryton ERP installieren? (J/n): " "J")
+  if [[ "$CHOOSE_TRYTON" =~ ^[Nn] ]]; then
+    WITH_TRYTON=false
+  else
+    WITH_TRYTON=true
+  fi
+fi
+
 # 5. Download Stack Configurations (from main — single source of truth)
 echo -e "${BLUE}📥 Downloading stack configurations...${NC}"
-if [ "$PORT_MODE" = true ]; then
-  curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.port.yml -o docker-compose.yml
-  rm -f Caddyfile
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+if [ "${TEST_MODE_LOCAL_CONFIG:-false}" = "true" ] && [ -f "$SCRIPT_DIR/docker-compose.yml" ]; then
+  echo "TEST_MODE_LOCAL_CONFIG is active. Copying local configs instead of downloading."
+  if [ "$PORT_MODE" = true ]; then
+    cp "$SCRIPT_DIR/docker-compose.port.yml" ./docker-compose.yml
+    rm -f Caddyfile
+  else
+    cp "$SCRIPT_DIR/docker-compose.yml" ./docker-compose.yml
+    cp "$SCRIPT_DIR/Caddyfile" ./Caddyfile
+  fi
 else
-  curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.yml -o docker-compose.yml
-  curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/Caddyfile -o Caddyfile
+  if [ "$PORT_MODE" = true ]; then
+    curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.port.yml -o docker-compose.yml
+    rm -f Caddyfile
+  else
+    curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.yml -o docker-compose.yml
+    curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/Caddyfile -o Caddyfile
+  fi
 fi
 
 # 6. Check/Install Docker and Compose
@@ -185,10 +231,19 @@ generate_secret() {
 }
 
 echo -e "${BLUE}🔑 Processing environment configuration...${NC}"
+# Extract or generate BUNDLED_TRYTON_ADMIN_PASSWORD once
+BUNDLED_TRYTON_PASS=""
+if [ -f .env ]; then
+  BUNDLED_TRYTON_PASS=$(grep -E "^BUNDLED_TRYTON_ADMIN_PASSWORD=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+fi
+if [ -z "$BUNDLED_TRYTON_PASS" ]; then
+  BUNDLED_TRYTON_PASS=$(generate_secret)
+fi
+
 if [ -f .env ]; then
   echo "Existing .env file found. Preserving all keys."
   temp_file=$(mktemp)
-  grep -E -v "^(DOMAIN|INSTALL_MODE|APP_PORT)=" .env > "$temp_file" || true
+  grep -E -v "^(DOMAIN|INSTALL_MODE|APP_PORT|BUNDLED_TRYTON|BUNDLED_TRYTON_URL|BUNDLED_TRYTON_DB|BUNDLED_TRYTON_ADMIN_USER|BUNDLED_TRYTON_ADMIN_PASSWORD|COMPOSE_PROFILES)=" .env > "$temp_file" || true
 
   echo "DOMAIN=${DOMAIN}" >> "$temp_file"
   if [ "$PORT_MODE" = true ]; then
@@ -197,6 +252,19 @@ if [ -f .env ]; then
   else
     echo "INSTALL_MODE=standard" >> "$temp_file"
   fi
+
+  if [ "$WITH_TRYTON" = true ]; then
+    echo "BUNDLED_TRYTON=true" >> "$temp_file"
+    echo "BUNDLED_TRYTON_URL=http://tryton:8000" >> "$temp_file"
+    echo "BUNDLED_TRYTON_DB=tryton" >> "$temp_file"
+    echo "BUNDLED_TRYTON_ADMIN_USER=admin" >> "$temp_file"
+    echo "BUNDLED_TRYTON_ADMIN_PASSWORD=${BUNDLED_TRYTON_PASS}" >> "$temp_file"
+    echo "COMPOSE_PROFILES=tryton" >> "$temp_file"
+  else
+    echo "BUNDLED_TRYTON=false" >> "$temp_file"
+    echo "COMPOSE_PROFILES=" >> "$temp_file"
+  fi
+
   mv "$temp_file" .env
 else
   echo "Creating fresh .env configuration..."
@@ -220,6 +288,22 @@ POSTGRES_PASSWORD=${POSTGRES_PASS}
 ENCRYPTION_KEY=${ENC_KEY}
 AUTH_SECRET=${AUTH_SEC}
 INSTALL_MODE=standard
+EOF
+  fi
+
+  if [ "$WITH_TRYTON" = true ]; then
+    cat <<EOF >> .env
+BUNDLED_TRYTON=true
+BUNDLED_TRYTON_URL=http://tryton:8000
+BUNDLED_TRYTON_DB=tryton
+BUNDLED_TRYTON_ADMIN_USER=admin
+BUNDLED_TRYTON_ADMIN_PASSWORD=${BUNDLED_TRYTON_PASS}
+COMPOSE_PROFILES=tryton
+EOF
+  else
+    cat <<EOF >> .env
+BUNDLED_TRYTON=false
+COMPOSE_PROFILES=
 EOF
   fi
   chmod 600 .env
@@ -314,6 +398,11 @@ if [ "$PORT_MODE" = true ]; then
   echo "Diese Installation ist vollwertig und dauerhaft: Daten bleiben erhalten,"
   echo "Updates laufen automatisch. Es fehlt nur noch SSL obendrauf."
   echo ""
+  if [ "$WITH_TRYTON" = true ]; then
+    echo "Integriertes Tryton wird im Hintergrund eingerichtet (einige Minuten) —"
+    echo "Sie können sich schon registrieren; das ERP verbinden Sie im Assistenten mit einem Klick."
+    echo ""
+  fi
   echo "Für HTTPS über Ihre Domain (ein Schritt, kein Neuaufsetzen):"
   echo "Fertige Vorlage für Ihren bestehenden Webserver liegt bereit unter"
   echo "  /opt/jaanos/nginx-jaanos.conf.example"
@@ -324,5 +413,10 @@ if [ "$PORT_MODE" = true ]; then
 else
   echo -e "${GREEN}🎉 JaanOS Core is running!${NC}"
   echo -e "Access it here: ${BLUE}https://${DOMAIN}${NC}"
+  if [ "$WITH_TRYTON" = true ]; then
+    echo ""
+    echo "Integriertes Tryton wird im Hintergrund eingerichtet (einige Minuten) —"
+    echo "Sie können sich schon registrieren; das ERP verbinden Sie im Assistenten mit einem Klick."
+  fi
 fi
 echo "================================================="

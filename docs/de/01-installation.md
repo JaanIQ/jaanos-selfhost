@@ -82,3 +82,17 @@ server {
 ```
 
 Die Konfiguration und Zertifikatsverwaltung liegt in diesem Fall bei Ihnen.
+
+---
+
+## Komplettpaket mit integriertem Tryton ERP
+
+JaanOS Core kann optional mit einem vorkonfigurierten, lokalen Tryton ERP als Komplettpaket in einem Schritt installiert werden.
+
+* **Was es ist:** Der Installer stellt neben JaanOS auch eine eigene, isolierte Instanz von Tryton ERP auf demselben Server bereit.
+* **Netzwerk-Sicherheit:** Die Tryton-Dienste sind **nicht** öffentlich über das Internet erreichbar. Sie laufen ausschließlich im internen, isolierten Docker-Netzwerk (`jaanos-net`). Ausschließlich JaanOS kommuniziert direkt mit Tryton, was die Angriffsfläche gegen Angriffe aus dem Netz auf null reduziert.
+* **Dauer der Ersteinrichtung:** Die erste Bereitstellung der Datenbank und aller Module (inklusive des deutschen SKR03-Kontenrahmens und Steuerschlüsseln) dauert beim ersten Start ca. **2 bis 3 Minuten**.
+* **Automatisierung / Flags:**
+  Sie können die interaktive Abfrage für das integrierte Tryton überspringen, indem Sie folgende Parameter übergeben:
+  * `--with-tryton`: Installiert das Komplettpaket mit Tryton ERP direkt.
+  * `--no-tryton`: Installiert ausschließlich JaanOS ohne lokales ERP.

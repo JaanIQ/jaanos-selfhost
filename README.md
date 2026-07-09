@@ -21,6 +21,13 @@ curl -fsSL https://jaanos.com/install.sh | bash
 - Offene Ports: `80` (HTTP) und `443` (HTTPS).
 - **Eine eigene Domain ist optional.** Ohne Domain vergibt der Installer automatisch eine kostenlose Adresse über sslip.io (z. B. `https://203-0-113-10.sslip.io`) — mit echtem SSL-Zertifikat, ganz ohne DNS-Einrichtung. Eine eigene Domain (A-Record auf die Server-IP) können Sie jederzeit nachrüsten: `bash install.sh --domain ihre-domain.de`.
 
+### 📦 Komplettpaket mit integriertem Tryton ERP (empfohlen)
+Der Installer bietet Ihnen interaktiv an, ein vorkonfiguriertes, lokales Tryton ERP mitzuinstallieren:
+* **Sicherheit:** Das Tryton ERP ist **nicht** öffentlich erreichbar, sondern läuft ausschließlich im geschützten Docker-Netzwerk. Nur JaanOS kommuniziert direkt mit ihm.
+* **Ersteinrichtung:** Die Datenbank und Module (u. a. SKR03-Kontenrahmen und Steuerschlüssel) werden vollautomatisch beim ersten Start eingerichtet (ca. 2-3 Minuten).
+* **Automatisierung:** Nutzen Sie `--with-tryton` oder `--no-tryton` beim Aufruf des Installers, um die interaktive Abfrage zu überspringen.
+
+
 ---
 
 ## 🔄 Automatische Updates & Wartung
@@ -42,10 +49,14 @@ bash install.sh
 
 Beim Self-Hosting liegt die Datensicherung in Ihrer Hand (siehe Nutzungsbedingungen). Zu sichern sind **zwei Dinge** — beide liegen unter `/opt/jaanos`:
 
-1. **Die Datenbank** (alle Verbindungen, Einstellungen, Verlauf):
+1. **Die Datenbanken** (alle Verbindungen, Einstellungen, Verlauf sowie das integrierte Tryton ERP):
 
 ```bash
-docker exec jaanos-db pg_dump -U jaanos jaanos > /opt/jaanos/backup_$(date +%F).sql
+# Sichern der JaanOS-Konfigurationsdatenbank
+docker exec jaanos-db pg_dump -U jaanos jaanos > /opt/jaanos/backup_jaanos_$(date +%F).sql
+
+# Sichern der Tryton ERP-Datenbank (falls integriertes Tryton genutzt wird)
+docker exec jaanos-db pg_dump -U jaanos tryton > /opt/jaanos/backup_tryton_$(date +%F).sql 2>/dev/null || true
 ```
 
 2. **Die `.env`-Datei** (enthält den `ENCRYPTION_KEY`):
@@ -55,15 +66,19 @@ cp /opt/jaanos/.env /opt/jaanos/env_backup_$(date +%F)
 ```
 
 > [!WARNING]
-> **Ohne den originalen `ENCRYPTION_KEY` ist ein Datenbank-Backup nur eingeschränkt nutzbar** — die verschlüsselten Zugangsdaten (ERP-Verbindungen, API-Keys) können dann nicht mehr entschlüsselt werden und müssten neu hinterlegt werden. Sichern Sie `.env` und Datenbank daher immer **zusammen** und bewahren Sie beide an einem sicheren Ort **außerhalb des Servers** auf.
+> **Ohne den originalen `ENCRYPTION_KEY` ist ein Datenbank-Backup nur eingeschränkt nutzbar** — die verschlüsselten Zugangsdaten (ERP-Verbindungen, API-Keys) können dann nicht mehr entschlüsselt werden und müssten neu hinterlegt werden. Sichern Sie `.env` und die Datenbank-Dumps daher immer **zusammen** und bewahren Sie beide an einem sicheren Ort **außerhalb des Servers** auf.
 
-**Wiederherstellung** auf einem frischen Server: Installer ausführen, dann die gesicherte `.env` nach `/opt/jaanos/.env` zurückkopieren, `bash install.sh` erneut ausführen und den SQL-Dump einspielen:
+**Wiederherstellung** auf einem frischen Server: Installer ausführen, dann die gesicherte `.env` nach `/opt/jaanos/.env` zurückkopieren, `bash install.sh` erneut ausführen (um die Container zu stoppen/starten und den Key einzulesen), und die SQL-Dumps einspielen:
 
 ```bash
-docker exec -i jaanos-db psql -U jaanos jaanos < backup_JJJJ-MM-TT.sql
+# JaanOS-Datenbank wiederherstellen
+docker exec -i jaanos-db psql -U jaanos jaanos < backup_jaanos_JJJJ-MM-TT.sql
+
+# Tryton ERP-Datenbank wiederherstellen (falls integriertes Tryton genutzt wird)
+docker exec -i jaanos-db psql -U jaanos tryton < backup_tryton_JJJJ-MM-TT.sql 2>/dev/null || true
 ```
 
-Tipp: Automatisieren Sie das Datenbank-Backup per Cronjob (z. B. täglich) und rotieren Sie alte Dumps.
+Tipp: Automatisieren Sie die Datenbank-Backups per Cronjob (z. B. täglich) und rotieren Sie alte Dumps.
 
 ---
 

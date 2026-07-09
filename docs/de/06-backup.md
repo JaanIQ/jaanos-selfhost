@@ -24,8 +24,10 @@ Führen Sie folgende Befehle aus, um das Backup manuell zu erstellen:
 mkdir -p /opt/jaanos/backups
 cd /opt/jaanos
 
-# 2. Datenbank-Dump erstellen
+# 2. Datenbank-Dumps erstellen
 docker compose exec db pg_dump -U jaanos -d jaanos > backups/jaanos_db_$(date +%F).sql
+# Falls das integrierte Tryton ERP genutzt wird, sichern Sie auch die tryton-Datenbank:
+docker compose exec db pg_dump -U jaanos -d tryton > backups/tryton_db_$(date +%F).sql 2>/dev/null || true
 
 # 3. .env-Datei kopieren
 cp .env backups/jaanos_env_$(date +%F).env
@@ -52,6 +54,8 @@ Stoppen Sie den Anwendungs-Container, damit während des Restores keine Schreibz
 ```bash
 cd /opt/jaanos
 docker compose stop jaanos-suite
+# Falls das integrierte Tryton ERP genutzt wird, stoppen Sie auch den Tryton-Container:
+docker compose stop tryton 2>/dev/null || true
 ```
 
 ### 3. Konfiguration (.env) wiederherstellen
@@ -63,22 +67,30 @@ chmod 600 /opt/jaanos/.env
 ```
 
 ### 4. Datenbank-Dump einspielen
-Löschen Sie die neu angelegte, leere Datenbank und spielen Sie das Backup ein:
+Löschen Sie die neu angelegten, leeren Datenbanken und spielen Sie das Backup ein:
 
 ```bash
-# Bestehende Datenbank leeren und neu erstellen
+# Bestehende Datenbanken leeren und neu erstellen
 docker compose exec db dropdb -U jaanos jaanos
 docker compose exec db createdb -U jaanos jaanos
 
-# Dump einspielen
+# Falls das integrierte Tryton ERP genutzt wird, leeren und erstellen Sie auch die tryton-Datenbank:
+docker compose exec db dropdb -U jaanos tryton 2>/dev/null || true
+docker compose exec db createdb -U jaanos tryton 2>/dev/null || true
+
+# Dumps einspielen
 cat /pfad/zu/ihrem/backup/jaanos_db_[DATUM].sql | docker compose exec -T db psql -U jaanos -d jaanos
+# Falls das integrierte Tryton ERP genutzt wird, spielen Sie auch dessen Dump ein:
+cat /pfad/zu/ihrem/backup/tryton_db_[DATUM].sql | docker compose exec -T db psql -U jaanos -d tryton 2>/dev/null || true
 ```
 
 ### 5. Anwendung starten
-Starten Sie die Anwendung wieder. Durch das Laden der alten `.env` und der Datenbank ist das System sofort wieder im Zustand des Backups einsatzbereit:
+Starten Sie die Anwendung wieder. Durch das Laden der alten `.env` und der Datenbanken ist das System sofort wieder im Zustand des Backups einsatzbereit:
 
 ```bash
 docker compose start jaanos-suite
+# Falls das integrierte Tryton ERP genutzt wird, starten Sie es ebenfalls:
+docker compose start tryton 2>/dev/null || true
 ```
 
 ---
@@ -93,5 +105,5 @@ Um jede Nacht um 03:00 Uhr automatisch ein Backup zu erstellen, können Sie eine
    ```
 2. Fügen Sie folgende Zeile hinzu (passen Sie den Pfad für externe Sicherung an):
    ```cron
-   0 3 * * * cd /opt/jaanos && docker compose exec -T db pg_dump -U jaanos -d jaanos > /opt/jaanos/backups/jaanos_db_$(date +\%F).sql && cp /opt/jaanos/.env /opt/jaanos/backups/jaanos_env_$(date +\%F).env
+   0 3 * * * cd /opt/jaanos && docker compose exec -T db pg_dump -U jaanos -d jaanos > /opt/jaanos/backups/jaanos_db_$(date +\%F).sql && (docker compose exec -T db pg_dump -U jaanos -d tryton > /opt/jaanos/backups/tryton_db_$(date +\%F).sql 2>/dev/null || true) && cp /opt/jaanos/.env /opt/jaanos/backups/jaanos_env_$(date +\%F).env
    ```
