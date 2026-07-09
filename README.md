@@ -23,15 +23,18 @@ curl -fsSL https://jaanos.com/install.sh | bash
 
 ---
 
-## 🔄 Updates & Wartung
+## 🔄 Automatische Updates & Wartung
 
-Updates können jederzeit durch erneutes Ausführen des Installationsskripts eingespielt werden:
+Die Instanz aktualisiert sich standardmäßig vollautomatisch über **Watchtower**. Watchtower prüft im Hintergrund (alle 24 Stunden) auf neue Images in der GitHub Container Registry (GHCR), lädt diese herunter und erstellt den Container neu.
+
+* **Daten & Keys bleiben erhalten:** Da Konfigurationen (wie der `ENCRYPTION_KEY` und das Datenbank-Passwort) aus der persistenten `.env`-Datei gelesen werden und die Daten in Docker-Volumes liegen, bleiben alle Keys und Datenbank-Inhalte beim automatischen Update unverändert und sicher.
+* **Automatische Migrationen:** Neue Datenbank-Migrationen werden durch `RUN_MIGRATIONS_ON_BOOT=true` beim Start des aktualisierten Containers automatisch angewendet.
+
+Falls Sie ein manuelles Update erzwingen oder die Konfiguration neu einlesen möchten, führen Sie einfach das Installationsskript erneut aus:
 
 ```bash
 bash install.sh
 ```
-
-Hierbei werden automatisch die neuesten Docker-Images heruntergeladen (`docker compose pull`) und die Container neu gestartet. Ihre bestehenden Konfigurationen (wie der `ENCRYPTION_KEY` und das Datenbankpasswort in der `.env`-Datei) sowie alle Daten im Docker-Volume bleiben vollständig unberührt und sicher.
 
 ---
 

@@ -20,8 +20,11 @@ services:
       - NEXT_PUBLIC_LOCK_ERP_CONNECTION=false
       - HUB_RATE_LIMIT_PER_MIN=600
       - AUTH_LOCAL_ENABLED=true
+      - RUN_MIGRATIONS_ON_BOOT=true
     networks:
       - jaanos-net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   db:
     image: postgres:16-alpine
@@ -53,6 +56,17 @@ services:
       - jaanos-suite
     networks:
       - jaanos-net
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: jaanos-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_POLL_INTERVAL=86400
+      - WATCHTOWER_CLEAN_UP=true
 
 volumes:
   postgres_data:
