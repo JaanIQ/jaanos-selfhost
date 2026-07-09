@@ -18,8 +18,8 @@ curl -fsSL https://jaanos.com/install.sh | bash
 
 ### ⚙️ Voraussetzungen
 - Ein Linux-Server (VPS) mit einer öffentlichen IPv4-Adresse (mindestens 2 GB RAM empfohlen).
-- Eine auf die IP-Adresse des Servers zeigende Domain oder Subdomain (wird für automatische Let's Encrypt SSL-Zertifikate benötigt).
 - Offene Ports: `80` (HTTP) und `443` (HTTPS).
+- **Eine eigene Domain ist optional.** Ohne Domain vergibt der Installer automatisch eine kostenlose Adresse über sslip.io (z. B. `https://203-0-113-10.sslip.io`) — mit echtem SSL-Zertifikat, ganz ohne DNS-Einrichtung. Eine eigene Domain (A-Record auf die Server-IP) können Sie jederzeit nachrüsten: `bash install.sh --domain ihre-domain.de`.
 
 ---
 
