@@ -17,10 +17,19 @@ echo "================================================="
 
 # Parse arguments
 DOMAIN=""
+APP_PORT=""
+PORT_MODE=""
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     --domain)
       DOMAIN="$2"
+      PORT_MODE=false
+      shift 2
+      ;;
+    --port)
+      APP_PORT="$2"
+      PORT_MODE=true
       shift 2
       ;;
     *)
@@ -30,17 +39,124 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Interactive prompt helper. Under `curl … | bash`, stdin is the SCRIPT itself —
+# a plain `read` would consume script text. Read from the terminal instead;
+# if no terminal is available (fully non-interactive), fall back to the default.
+ask() {
+  local prompt="$1" default="$2" answer=""
+  if [ -r /dev/tty ]; then
+    read -rp "$prompt" answer < /dev/tty || true
+  fi
+  if [ -z "$answer" ]; then
+    answer="$default"
+  fi
+  echo "$answer"
+}
+
 # 1. Set up Workspace Directory
 echo -e "${BLUE}📁 Setting up workspace directory /opt/jaanos...${NC}"
 mkdir -p /opt/jaanos
 cd /opt/jaanos
 
-# 2. Download Stack Configurations
-echo -e "${BLUE}📥 Downloading stack configurations...${NC}"
-curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.yml -o docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/Caddyfile -o Caddyfile
+# 2. Respect an existing installation's mode if no flags were passed (re-run = update)
+if [ -z "$PORT_MODE" ]; then
+  if [ -f .env ]; then
+    INSTALL_MODE=$(grep -E "^INSTALL_MODE=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if [ "$INSTALL_MODE" = "port" ]; then
+      PORT_MODE=true
+      APP_PORT=$(grep -E "^APP_PORT=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+      DOMAIN=$(grep -E "^DOMAIN=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    else
+      PORT_MODE=false
+      DOMAIN=$(grep -E "^DOMAIN=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    fi
+  fi
+fi
 
-# 3. Check/Install Docker and Compose
+# 3. Occupied 80/443? Offer port mode (for servers already running a web server).
+if [ -z "$PORT_MODE" ]; then
+  if command -v ss >/dev/null 2>&1 && ss -tln | grep -q -E ':(80|443)\b'; then
+    echo -e "${RED}⚠️ Ports 80/443 sind belegt (z. B. durch einen bestehenden Webserver).${NC}"
+    echo "JaanOS kann im Test-Modus auf einem eigenen Port laufen — ohne die bestehenden Dienste zu berühren."
+    CHOOSE_PORT_MODE=$(ask "Test-Modus auf eigenem Port starten? (J/n): " "J")
+    if [[ "$CHOOSE_PORT_MODE" =~ ^[Nn] ]]; then
+      echo "Installation abgebrochen."
+      exit 1
+    fi
+    USER_PORT=$(ask "Gewünschter Port [Default: 8321]: " "8321")
+    if [[ ! "$USER_PORT" =~ ^[0-9]+$ ]]; then
+      echo -e "${RED}Fehler: Ungültiger Port.${NC}"
+      exit 1
+    fi
+    APP_PORT="$USER_PORT"
+    PORT_MODE=true
+  else
+    PORT_MODE=false
+  fi
+fi
+
+# Helper: detect the server's public IPv4 (empty on failure — callers decide).
+get_public_ip() {
+  local ip
+  ip=$(curl -fsS --max-time 10 -4 https://api.ipify.org 2>/dev/null || curl -fsS --max-time 10 -4 https://ifconfig.me 2>/dev/null || true)
+  echo "$ip" | tr -d ' \n'
+}
+
+# 4. Resolve Domain / IP based on mode
+if [ "$PORT_MODE" = true ]; then
+  if [ -z "$APP_PORT" ]; then
+    APP_PORT=8321
+  fi
+  if [ -z "$DOMAIN" ]; then
+    DOMAIN=$(get_public_ip)
+    if [ -z "$DOMAIN" ]; then
+      DOMAIN=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    if [ -z "$DOMAIN" ]; then
+      DOMAIN="127.0.0.1"
+      echo -e "${RED}⚠️ Konnte keine Server-IP ermitteln — verwende 127.0.0.1 (nur lokal erreichbar).${NC}"
+    fi
+  fi
+else
+  if [ -z "$DOMAIN" ]; then
+    echo ""
+    echo "Eine eigene Domain ist optional. Einfach ENTER drücken — JaanOS ist dann über eine"
+    echo "kostenlose sslip.io-Adresse erreichbar (echtes HTTPS, keine DNS-Einrichtung nötig)."
+    USER_DOMAIN=$(ask "Domain (z. B. jaanos.example.com) oder ENTER für automatisch: " "")
+    if [ -z "$USER_DOMAIN" ]; then
+      echo -e "${BLUE}🌐 Keine Domain angegeben — ermittle öffentliche IP für die automatische sslip.io-Adresse...${NC}"
+      PUBLIC_IP=$(get_public_ip)
+      if [ -z "$PUBLIC_IP" ]; then
+        echo -e "${RED}Fehler: Öffentliche IP nicht ermittelbar. Bitte erneut mit --domain <ihre-domain> ausführen.${NC}"
+        exit 1
+      fi
+      DOMAIN="$(echo "$PUBLIC_IP" | tr '.' '-').sslip.io"
+      echo -e "${GREEN}✓ Automatische Adresse: https://${DOMAIN}${NC}"
+      echo "  (Eigene Domain jederzeit nachrüstbar: bash install.sh --domain ihre-domain.de)"
+    else
+      DOMAIN="$USER_DOMAIN"
+    fi
+  fi
+fi
+
+if [ -z "$DOMAIN" ]; then
+  echo -e "${RED}Error: Domain is required.${NC}"
+  exit 1
+fi
+
+DOMAIN=$(echo "$DOMAIN" | tr -d ' ' | tr -d '"' | tr -d "'")
+
+# 5. Download Stack Configurations (from main — single source of truth)
+echo -e "${BLUE}📥 Downloading stack configurations...${NC}"
+if [ "$PORT_MODE" = true ]; then
+  curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.port.yml -o docker-compose.yml
+  rm -f Caddyfile
+else
+  curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.yml -o docker-compose.yml
+  curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/Caddyfile -o Caddyfile
+fi
+
+# 6. Check/Install Docker and Compose
 echo -e "${BLUE}⚙️ Checking Docker environment...${NC}"
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is not installed. Installing Docker..."
@@ -55,39 +171,7 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 echo -e "${GREEN}✓ Docker and Compose plugin are active.${NC}"
 
-# 4. Get Domain Configuration
-if [ -z "$DOMAIN" ]; then
-  if [ -f .env ]; then
-    # Extract domain from existing .env
-    DOMAIN=$(grep -E "^DOMAIN=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-  fi
-
-  if [ -z "$DOMAIN" ]; then
-    echo ""
-    echo "A domain is optional. Press ENTER to skip — JaanOS will then be reachable"
-    echo "via a free sslip.io address based on your server IP (real HTTPS, zero DNS setup)."
-    read -rp "Domain (e.g. jaanos.example.com) or ENTER for automatic: " DOMAIN
-  fi
-fi
-
-# No domain? Fall back to a magic sslip.io hostname (resolves to this server's IP
-# automatically — Let's Encrypt works, no DNS configuration required).
-if [ -z "$DOMAIN" ]; then
-  echo -e "${BLUE}🌐 No domain provided — detecting public IP for an automatic sslip.io address...${NC}"
-  PUBLIC_IP=$(curl -fsS --max-time 10 -4 https://api.ipify.org 2>/dev/null || curl -fsS --max-time 10 -4 https://ifconfig.me 2>/dev/null || true)
-  if [ -z "$PUBLIC_IP" ]; then
-    echo -e "${RED}Error: Could not detect the public IP. Please re-run with --domain <your-domain>.${NC}"
-    exit 1
-  fi
-  DOMAIN="$(echo "$PUBLIC_IP" | tr '.' '-').sslip.io"
-  echo -e "${GREEN}✓ Using automatic address: https://${DOMAIN}${NC}"
-  echo "  (You can switch to your own domain at any time: bash install.sh --domain your-domain.com)"
-fi
-
-# Clean domain name input
-DOMAIN=$(echo "$DOMAIN" | tr -d ' ' | tr -d '"' | tr -d "'")
-
-# 5. Generate .env values securely if not exists
+# 7. Generate .env values securely if not exists
 generate_secret() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -hex 32
@@ -99,11 +183,16 @@ generate_secret() {
 echo -e "${BLUE}🔑 Processing environment configuration...${NC}"
 if [ -f .env ]; then
   echo "Existing .env file found. Preserving all keys."
-  # Ensure the domain is up to date in .env
-  # Temp file for replacement
   temp_file=$(mktemp)
-  grep -v "^DOMAIN=" .env > "$temp_file" || true
+  grep -E -v "^(DOMAIN|INSTALL_MODE|APP_PORT)=" .env > "$temp_file" || true
+
   echo "DOMAIN=${DOMAIN}" >> "$temp_file"
+  if [ "$PORT_MODE" = true ]; then
+    echo "INSTALL_MODE=port" >> "$temp_file"
+    echo "APP_PORT=${APP_PORT}" >> "$temp_file"
+  else
+    echo "INSTALL_MODE=standard" >> "$temp_file"
+  fi
   mv "$temp_file" .env
 else
   echo "Creating fresh .env configuration..."
@@ -111,31 +200,54 @@ else
   ENC_KEY=$(generate_secret)
   AUTH_SEC=$(generate_secret)
 
-  cat <<EOF > .env
+  if [ "$PORT_MODE" = true ]; then
+    cat <<EOF > .env
 DOMAIN=${DOMAIN}
 POSTGRES_PASSWORD=${POSTGRES_PASS}
 ENCRYPTION_KEY=${ENC_KEY}
 AUTH_SECRET=${AUTH_SEC}
+INSTALL_MODE=port
+APP_PORT=${APP_PORT}
 EOF
+  else
+    cat <<EOF > .env
+DOMAIN=${DOMAIN}
+POSTGRES_PASSWORD=${POSTGRES_PASS}
+ENCRYPTION_KEY=${ENC_KEY}
+AUTH_SECRET=${AUTH_SEC}
+INSTALL_MODE=standard
+EOF
+  fi
   chmod 600 .env
 fi
 echo -e "${GREEN}✓ Configuration saved in .env.${NC}"
 
-# 6. Pull and launch the stack
+# 8. Pull and launch the stack
 echo -e "${BLUE}📥 Pulling latest Docker images...${NC}"
-docker compose pull
+if [ "${TEST_MODE_NO_PULL:-false}" != "true" ]; then
+  docker compose pull
+else
+  echo "TEST_MODE_NO_PULL is active. Skipping docker compose pull."
+fi
 
 echo -e "${BLUE}♻️ Starting containers...${NC}"
 docker compose up -d
 
-# 7. Wait for proxy/app to become active
+# 9. Wait for proxy/app to become active
 echo -e "${BLUE}🏥 Checking system health...${NC}"
 for i in {1..12}; do
   sleep 5
-  if curl -sf -H "Host: ${DOMAIN}" http://127.0.0.1/ >/dev/null 2>&1 || \
-     curl -sf -k https://127.0.0.1/ >/dev/null 2>&1; then
-    echo -e "${GREEN}✓ JaanOS is responding.${NC}"
-    break
+  if [ "$PORT_MODE" = true ]; then
+    if curl -sf "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
+      echo -e "${GREEN}✓ JaanOS is responding.${NC}"
+      break
+    fi
+  else
+    if curl -sf -H "Host: ${DOMAIN}" http://127.0.0.1/ >/dev/null 2>&1 || \
+       curl -sf -k https://127.0.0.1/ >/dev/null 2>&1; then
+      echo -e "${GREEN}✓ JaanOS is responding.${NC}"
+      break
+    fi
   fi
   echo "Waiting for services... (Attempt $i/12)"
   if [ "$i" -eq 12 ]; then
@@ -144,6 +256,12 @@ for i in {1..12}; do
 done
 
 echo "================================================="
-echo -e "${GREEN}🎉 JaanOS Core is running!${NC}"
-echo -e "Access it here: ${BLUE}https://${DOMAIN}${NC}"
+if [ "$PORT_MODE" = true ]; then
+  echo -e "${GREEN}JaanOS läuft (Test-Modus, ohne SSL) → http://${DOMAIN}:${APP_PORT}${NC}"
+  echo "Hinweis: Für den Dauerbetrieb mit HTTPS: eigenen Server ohne belegte Ports 80/443 nutzen"
+  echo "oder JaanOS hinter Ihren bestehenden Webserver legen (siehe Doku)."
+else
+  echo -e "${GREEN}🎉 JaanOS Core is running!${NC}"
+  echo -e "Access it here: ${BLUE}https://${DOMAIN}${NC}"
+fi
 echo "================================================="
