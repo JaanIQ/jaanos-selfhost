@@ -24,8 +24,10 @@ Execute the following commands to create a backup manually:
 mkdir -p /opt/jaanos/backups
 cd /opt/jaanos
 
-# 2. Export database dump
+# 2. Export database dumps
 docker compose exec db pg_dump -U jaanos -d jaanos > backups/jaanos_db_$(date +%F).sql
+# If using the integrated Tryton ERP, also back up the tryton database:
+docker compose exec db pg_dump -U jaanos -d tryton > backups/tryton_db_$(date +%F).sql 2>/dev/null || true
 
 # 3. Copy .env file
 cp .env backups/jaanos_env_$(date +%F).env
@@ -52,6 +54,8 @@ Stop the main application container to prevent write requests during the restore
 ```bash
 cd /opt/jaanos
 docker compose stop jaanos-suite
+# If using the integrated Tryton ERP, also stop the tryton container:
+docker compose stop tryton 2>/dev/null || true
 ```
 
 ### 3. Restore Configuration (.env)
@@ -63,22 +67,30 @@ chmod 600 /opt/jaanos/.env
 ```
 
 ### 4. Restore Database Dump
-Drop the clean database created by the installer and restore the SQL dump:
+Drop the clean databases created by the installer and restore the SQL dumps:
 
 ```bash
-# Empty existing database and recreate it
+# Empty existing databases and recreate them
 docker compose exec db dropdb -U jaanos jaanos
 docker compose exec db createdb -U jaanos jaanos
 
-# Import the SQL dump
+# If using the integrated Tryton ERP, also empty and recreate the tryton database:
+docker compose exec db dropdb -U jaanos tryton 2>/dev/null || true
+docker compose exec db createdb -U jaanos tryton 2>/dev/null || true
+
+# Import the SQL dumps
 cat /path/to/your/backup/jaanos_db_[DATE].sql | docker compose exec -T db psql -U jaanos -d jaanos
+# If using the integrated Tryton ERP, also import its SQL dump:
+cat /path/to/your/backup/tryton_db_[DATE].sql | docker compose exec -T db psql -U jaanos -d tryton 2>/dev/null || true
 ```
 
 ### 5. Start Application
-Start the application services. Since the original `.env` and database are in place, the system is immediately ready for use:
+Start the application services. Since the original `.env` and databases are in place, the system is immediately ready for use:
 
 ```bash
 docker compose start jaanos-suite
+# If using the integrated Tryton ERP, also start it:
+docker compose start tryton 2>/dev/null || true
 ```
 
 ---
@@ -93,5 +105,5 @@ To automate backups every night at 3:00 AM, configure a cron job.
    ```
 2. Add the following line (adjust paths as needed for external mounts):
    ```cron
-   0 3 * * * cd /opt/jaanos && docker compose exec -T db pg_dump -U jaanos -d jaanos > /opt/jaanos/backups/jaanos_db_$(date +\%F).sql && cp /opt/jaanos/.env /opt/jaanos/backups/jaanos_env_$(date +\%F).env
+   0 3 * * * cd /opt/jaanos && docker compose exec -T db pg_dump -U jaanos -d jaanos > /opt/jaanos/backups/jaanos_db_$(date +\%F).sql && (docker compose exec -T db pg_dump -U jaanos -d tryton > /opt/jaanos/backups/tryton_db_$(date +\%F).sql 2>/dev/null || true) && cp /opt/jaanos/.env /opt/jaanos/backups/jaanos_env_$(date +\%F).env
    ```

@@ -82,3 +82,18 @@ server {
 ```
 
 Configuration and certificate management are your responsibility in this case.
+
+---
+
+## Bundle Mode with Integrated Tryton ERP
+
+JaanOS Core can optionally be installed alongside a pre-configured, local Tryton ERP instance as a complete bundle in a single step.
+
+* **What it is:** The installer provisions a dedicated, isolated instance of Tryton ERP on the same server alongside the JaanOS dashboard.
+* **Network Security:** The Tryton services are **not** publicly accessible from the internet. They run entirely within the internal, isolated Docker bridge network (`jaanos-net`). Only JaanOS communicates directly with Tryton, reducing the public network attack surface to zero.
+* **Initial Setup Duration:** The initial provisioning of the database and its core modules (including the German SKR03 chart of accounts and tax templates) takes approximately **2 to 3 minutes** during the first boot.
+* **Automation / Flags:**
+  You can bypass the interactive Tryton prompt by passing one of the following arguments to the installer:
+  * `--with-tryton`: Automatically installs the complete bundle with Tryton ERP.
+  * `--no-tryton`: Installs only JaanOS without the local Tryton ERP.
+
