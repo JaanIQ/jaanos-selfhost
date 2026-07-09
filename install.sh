@@ -30,7 +30,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# 1. Check/Install Docker and Compose
+# 1. Set up Workspace Directory
+echo -e "${BLUE}📁 Setting up workspace directory /opt/jaanos...${NC}"
+mkdir -p /opt/jaanos
+cd /opt/jaanos
+
+# 2. Download Stack Configurations
+echo -e "${BLUE}📥 Downloading stack configurations...${NC}"
+curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/Caddyfile -o Caddyfile
+
+# 3. Check/Install Docker and Compose
 echo -e "${BLUE}⚙️ Checking Docker environment...${NC}"
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is not installed. Installing Docker..."
@@ -45,7 +55,7 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 echo -e "${GREEN}✓ Docker and Compose plugin are active.${NC}"
 
-# 2. Get Domain Configuration
+# 4. Get Domain Configuration
 if [ -z "$DOMAIN" ]; then
   if [ -f .env ]; then
     # Extract domain from existing .env
@@ -65,7 +75,7 @@ fi
 # Clean domain name input
 DOMAIN=$(echo "$DOMAIN" | tr -d ' ' | tr -d '"' | tr -d "'")
 
-# 3. Generate .env values securely if not exists
+# 5. Generate .env values securely if not exists
 generate_secret() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -hex 32
@@ -99,14 +109,14 @@ EOF
 fi
 echo -e "${GREEN}✓ Configuration saved in .env.${NC}"
 
-# 4. Pull and launch the stack
+# 6. Pull and launch the stack
 echo -e "${BLUE}📥 Pulling latest Docker images...${NC}"
 docker compose pull
 
 echo -e "${BLUE}♻️ Starting containers...${NC}"
 docker compose up -d
 
-# 5. Wait for proxy/app to become active
+# 7. Wait for proxy/app to become active
 echo -e "${BLUE}🏥 Checking system health...${NC}"
 for i in {1..12}; do
   sleep 5
