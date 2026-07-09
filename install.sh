@@ -228,7 +228,17 @@ echo -e "${GREEN}✓ Configuration saved in .env.${NC}"
 # 8. Pull and launch the stack
 echo -e "${BLUE}📥 Pulling latest Docker images...${NC}"
 if [ "${TEST_MODE_NO_PULL:-false}" != "true" ]; then
-  docker compose pull
+  if ! docker compose pull; then
+    echo ""
+    echo -e "${RED}⚠️ Image-Download fehlgeschlagen.${NC}"
+    echo "Häufigste Ursache auf bereits genutzten Servern: ein alter, abgelaufener"
+    echo "Registry-Login. Docker sendet dann ungültige Zugangsdaten mit, obwohl das"
+    echo "JaanOS-Image öffentlich ist ('error from registry: denied')."
+    echo ""
+    echo "Lösung:  docker logout ghcr.io"
+    echo "Danach dieses Skript einfach erneut ausführen — es macht dort weiter, wo es aufgehört hat."
+    exit 1
+  fi
 else
   echo "TEST_MODE_NO_PULL is active. Skipping docker compose pull."
 fi
