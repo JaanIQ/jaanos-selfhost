@@ -89,9 +89,16 @@ Kein Lock-in — auch das Gehen ist nur ein paar Befehle. Möchten Sie Ihre Date
 ```bash
 cd /opt/jaanos
 docker compose down          # stoppt alle JaanOS-Container (Daten bleiben erhalten)
-docker compose down -v       # stoppt UND löscht die Daten-Volumes (unwiderruflich!)
+docker compose down -v --remove-orphans       # stoppt UND löscht die Daten-Volumes (unwiderruflich!)
 cd / && rm -rf /opt/jaanos   # entfernt Konfiguration inkl. .env und Schlüssel
 ```
+
+> [!NOTE]
+> Meldet `docker network rm` einen Fehler wie `network has active endpoints`, hat sich ein **fremder** Container (aus einem anderen Projekt auf dem Server) mit dem Netz verbunden. Trennen Sie ihn — **löschen Sie ihn nicht**:
+> ```bash
+> docker network inspect jaanos_default --format '{{range .Containers}}{{.Name}} {{end}}'
+> docker network disconnect jaanos_default <fremder-container-name>
+> ```
 
 Docker selbst bleibt dabei installiert (wird evtl. von anderen Anwendungen genutzt); bei Bedarf entfernen Sie es über die Paketverwaltung Ihres Systems. Damit ist JaanOS rückstandsfrei vom Server entfernt.
 

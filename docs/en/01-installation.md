@@ -62,7 +62,7 @@ curl -fsSL https://jaanos.com/install.sh | bash -s -- --port 8321
 
 * Reachable at `http://[SERVER-IP]:8321`. The installation is **full-featured and permanent** (data, automatic updates — everything as in standard mode). Only SSL is missing: Let's Encrypt requires ports 80/443, which your existing web server holds. For access over the open internet, complete the HTTPS step (below) — **one step, no reinstall**. The installer ships a ready template with your chosen port at `/opt/jaanos/nginx-jaanos.conf.example`.
 * No Caddy is started; all containers, volumes, and files stay isolated under `/opt/jaanos`.
-* Clean removal: `cd /opt/jaanos && docker compose down -v && cd / && rm -rf /opt/jaanos` — your existing services keep running untouched.
+* Clean removal: `cd /opt/jaanos && docker compose down -v --remove-orphans && cd / && rm -rf /opt/jaanos` — your existing services keep running untouched.
 * Re-running the installer keeps port mode (stored in `.env` as `INSTALL_MODE=port`).
 
 ### Advanced: running behind your existing nginx
