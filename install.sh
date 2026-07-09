@@ -61,15 +61,27 @@ if [ -z "$DOMAIN" ]; then
     # Extract domain from existing .env
     DOMAIN=$(grep -E "^DOMAIN=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
   fi
-  
+
   if [ -z "$DOMAIN" ]; then
-    read -rp "Please enter your domain (e.g. jaanos.example.com): " DOMAIN
+    echo ""
+    echo "A domain is optional. Press ENTER to skip — JaanOS will then be reachable"
+    echo "via a free sslip.io address based on your server IP (real HTTPS, zero DNS setup)."
+    read -rp "Domain (e.g. jaanos.example.com) or ENTER for automatic: " DOMAIN
   fi
 fi
 
+# No domain? Fall back to a magic sslip.io hostname (resolves to this server's IP
+# automatically — Let's Encrypt works, no DNS configuration required).
 if [ -z "$DOMAIN" ]; then
-  echo -e "${RED}Error: Domain is required.${NC}"
-  exit 1
+  echo -e "${BLUE}🌐 No domain provided — detecting public IP for an automatic sslip.io address...${NC}"
+  PUBLIC_IP=$(curl -fsS --max-time 10 -4 https://api.ipify.org 2>/dev/null || curl -fsS --max-time 10 -4 https://ifconfig.me 2>/dev/null || true)
+  if [ -z "$PUBLIC_IP" ]; then
+    echo -e "${RED}Error: Could not detect the public IP. Please re-run with --domain <your-domain>.${NC}"
+    exit 1
+  fi
+  DOMAIN="$(echo "$PUBLIC_IP" | tr '.' '-').sslip.io"
+  echo -e "${GREEN}✓ Using automatic address: https://${DOMAIN}${NC}"
+  echo "  (You can switch to your own domain at any time: bash install.sh --domain your-domain.com)"
 fi
 
 # Clean domain name input
