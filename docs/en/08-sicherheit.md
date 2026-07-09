@@ -18,7 +18,7 @@ All credentials used to connect to your ERP systems (such as passwords and API t
 
 ## Exclusion of Telemetry and Tracking
 
-JaanOS Core does **not contain any telemetry, call-home connections, or tracking scripts**.
+JaanOS Core does **not contain any telemetry or tracking scripts** — no usage or business data is ever transmitted to us. The stack's only regular outbound connection is Watchtower's update check against the public container registry (which can be disabled).
 * **Zero Usage Data:** No statistics regarding usage patterns, user count, or system load are transmitted to JaanIQ.
 * **Network Transparency:** The application only initiates outbound network connections to data sources (e.g., your Tryton ERP) and AI API endpoints that you have explicitly configured.
 
@@ -29,6 +29,6 @@ JaanOS Core does **not contain any telemetry, call-home connections, or tracking
 A core security aspect of JaanOS Core is protecting your confidential financial and customer records when interacting with artificial intelligence:
 
 * **Bring Your Own Key (BYOK):** By supplying your own API keys, your usage is subject to your direct agreement with the respective AI provider.
-* **No Unauthorized Training:** Leading API providers (such as Google Vertex AI, Anthropic API, or OpenAI commercial APIs) guarantee in their developer terms that data transmitted via APIs is **never** used to train public models.
-* **Geographical Control (EU Hosting):** You can configure endpoints located within the European Union (such as Google Vertex AI in Frankfurt or Mistral AI in Paris) to maintain compliance with GDPR guidelines.
-* **100% Offline Deployments (Ollama):** For maximum security, JaanOS Core can run fully offline by connecting to a local Ollama instance within your intranet. In this configuration, no data leaves your internal network.
+* **No Training by JaanOS:** JaanOS itself never uses your data for AI training. With BYOK, requests go only to the providers you choose — how they handle API data is governed by their respective terms (many commercial API offerings exclude training on customer data; review your provider's terms).
+* **Geographical Control (EU Hosting):** You can configure endpoints located within the European Union (such as Google Vertex AI in Frankfurt or Mistral AI in Paris) which supports you in meeting GDPR requirements for third-country transfers.
+* **Local AI Processing (Ollama):** For maximum security, connect a local Ollama instance within your network — AI processing of your business data then stays entirely inside your internal network. (Note: automatic updates and SSL certificates still require internet access unless you disable those features.)
