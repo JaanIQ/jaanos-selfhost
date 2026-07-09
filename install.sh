@@ -229,15 +229,24 @@ echo -e "${GREEN}✓ Configuration saved in .env.${NC}"
 echo -e "${BLUE}📥 Pulling latest Docker images...${NC}"
 if [ "${TEST_MODE_NO_PULL:-false}" != "true" ]; then
   if ! docker compose pull; then
+    # Common on servers already in use: a stale registry login makes Docker send
+    # invalid credentials even though the JaanOS image is public ("denied").
+    # Retry anonymously with an EMPTY docker config — this ignores stored logins
+    # for this one command WITHOUT touching or deleting the user's credentials.
     echo ""
-    echo -e "${RED}⚠️ Image-Download fehlgeschlagen.${NC}"
-    echo "Häufigste Ursache auf bereits genutzten Servern: ein alter, abgelaufener"
-    echo "Registry-Login. Docker sendet dann ungültige Zugangsdaten mit, obwohl das"
-    echo "JaanOS-Image öffentlich ist ('error from registry: denied')."
-    echo ""
-    echo "Lösung:  docker logout ghcr.io"
-    echo "Danach dieses Skript einfach erneut ausführen — es macht dort weiter, wo es aufgehört hat."
-    exit 1
+    echo -e "${BLUE}↻ Erster Download fehlgeschlagen — erneuter Versuch ohne gespeicherte Registry-Logins (anonym)...${NC}"
+    ANON_CONFIG=$(mktemp -d)
+    if DOCKER_CONFIG="$ANON_CONFIG" docker compose pull; then
+      echo -e "${GREEN}✓ Anonymer Download erfolgreich (Ihre gespeicherten Docker-Logins wurden nicht verändert).${NC}"
+      rm -rf "$ANON_CONFIG"
+    else
+      rm -rf "$ANON_CONFIG"
+      echo ""
+      echo -e "${RED}⚠️ Image-Download fehlgeschlagen.${NC}"
+      echo "Bitte prüfen Sie die Internetverbindung des Servers und führen Sie das Skript erneut aus."
+      echo "Bleibt der Fehler 'denied' bestehen:  docker logout ghcr.io  und erneut ausführen."
+      exit 1
+    fi
   fi
 else
   echo "TEST_MODE_NO_PULL is active. Skipping docker compose pull."
