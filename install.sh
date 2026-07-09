@@ -80,8 +80,9 @@ fi
 if [ -z "$PORT_MODE" ]; then
   if command -v ss >/dev/null 2>&1 && ss -tln | grep -q -E ':(80|443)\b'; then
     echo -e "${RED}⚠️ Ports 80/443 sind belegt (z. B. durch einen bestehenden Webserver).${NC}"
-    echo "JaanOS kann im Test-Modus auf einem eigenen Port laufen — ohne die bestehenden Dienste zu berühren."
-    CHOOSE_PORT_MODE=$(ask "Test-Modus auf eigenem Port starten? (J/n): " "J")
+    echo "JaanOS läuft dann auf einem eigenen Port — vollwertig, ohne die bestehenden Dienste zu berühren."
+    echo "(Für HTTPS wird eine fertige Vorlage für Ihren vorhandenen Webserver mitgeliefert.)"
+    CHOOSE_PORT_MODE=$(ask "Auf eigenem Port installieren? (J/n): " "J")
     if [[ "$CHOOSE_PORT_MODE" =~ ^[Nn] ]]; then
       echo "Installation abgebrochen."
       exit 1
@@ -277,11 +278,44 @@ for i in {1..12}; do
   fi
 done
 
+# Port mode: ship a ready-to-use vhost template for the user's existing web server,
+# with the actual chosen port already filled in — completing HTTPS is ONE step,
+# not a reinstall (this installation is full-featured and permanent as-is).
+if [ "$PORT_MODE" = true ]; then
+  cat > /opt/jaanos/nginx-jaanos.conf.example <<NGINXEOF
+# JaanOS hinter Ihrem bestehenden nginx (HTTPS macht dann nginx/certbot):
+#   1) Domain unten eintragen (DNS muss auf diesen Server zeigen)
+#   2) sudo cp /opt/jaanos/nginx-jaanos.conf.example /etc/nginx/sites-available/jaanos
+#      sudo ln -s /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
+#   3) sudo nginx -t && sudo systemctl reload nginx
+#   4) sudo certbot --nginx -d jaanos.ihre-domain.de
+server {
+    listen 80;
+    server_name jaanos.ihre-domain.de;
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+    }
+}
+NGINXEOF
+fi
+
 echo "================================================="
 if [ "$PORT_MODE" = true ]; then
-  echo -e "${GREEN}JaanOS läuft (Test-Modus, ohne SSL) → http://${DOMAIN}:${APP_PORT}${NC}"
-  echo "Hinweis: Für den Dauerbetrieb mit HTTPS: eigenen Server ohne belegte Ports 80/443 nutzen"
-  echo "oder JaanOS hinter Ihren bestehenden Webserver legen (siehe Doku)."
+  echo -e "${GREEN}🎉 JaanOS läuft → http://${DOMAIN}:${APP_PORT}${NC}"
+  echo ""
+  echo "Diese Installation ist vollwertig und dauerhaft: Daten bleiben erhalten,"
+  echo "Updates laufen automatisch. Es fehlt nur noch SSL obendrauf."
+  echo ""
+  echo "Für HTTPS über Ihre Domain (ein Schritt, kein Neuaufsetzen):"
+  echo "Fertige Vorlage für Ihren bestehenden Webserver liegt bereit unter"
+  echo "  /opt/jaanos/nginx-jaanos.conf.example"
+  echo "(Domain eintragen, aktivieren, certbot ausführen — Anleitung steht in der Datei.)"
+  echo ""
+  echo "Bis dahin: Verbindung ist unverschlüsselt (HTTP) — für den offenen"
+  echo "Internet-Zugriff bitte erst den HTTPS-Schritt abschließen."
 else
   echo -e "${GREEN}🎉 JaanOS Core is running!${NC}"
   echo -e "Access it here: ${BLUE}https://${DOMAIN}${NC}"
