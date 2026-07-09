@@ -9,11 +9,10 @@ Before beginning the installation, ensure your server meets the following requir
 * **System Resources:** At least 2 GB of RAM is recommended.
 * **Network:** A public IPv4 address.
 * **Firewall / Open Ports:** Ports `80` (HTTP) and `443` (HTTPS) must be open for inbound traffic.
-* **Domain:** A domain or subdomain pointing to the server's public IP address (required for the automatic Let's Encrypt SSL certificate).
+* **Domain (optional):** A domain of your own pointing to the server IP is **not required** — without one, the installer automatically assigns a working address (see below). You can switch to your own domain at any time.
 
-### Fallback Domain (sslip.io)
-If you do not own a registered domain or want to test the system first, you can use a wildcard domain from `sslip.io`. Use your public IP address in the following format:
-`[YOUR-SERVER-IP].sslip.io` (e.g., `192.0.2.1.sslip.io`). The DNS resolution automatically routes requests to your server, allowing Caddy to issue a valid SSL certificate.
+### Without your own domain: the automatic sslip.io fallback
+Simply press **ENTER** at the domain prompt. The installer then detects your server's public IP address and automatically uses an address of the form `[IP-WITH-DASHES].sslip.io` (e.g., `203-0-113-10.sslip.io`). sslip.io's DNS resolution automatically routes requests to your server, allowing Caddy to issue a valid Let's Encrypt SSL certificate — with zero DNS setup. Switch to your own domain later at any time with: `bash install.sh --domain your-domain.com`.
 
 ---
 
@@ -41,7 +40,7 @@ The installation script performs the following actions sequentially:
 1. **Create Workspace Directory:** It creates the directory `/opt/jaanos` on your server and navigates into it. All configuration files and persistent data volumes are managed here.
 2. **Download Configuration Files:** It downloads the current versions of `docker-compose.yml` and `Caddyfile` from the GitHub repository.
 3. **Verify Docker Environment:** It checks if Docker and the Docker Compose plugin are installed. If Docker is missing, it is automatically installed using the official script from `https://get.docker.com`. The script verifies that the Compose plugin is active (it will exit if it is missing).
-4. **Retrieve Domain Configuration:** If the `--domain` parameter was not provided, the script checks if an existing `.env` file contains a configured domain. Otherwise, it prompts you interactively to enter your domain.
+4. **Retrieve Domain Configuration:** If the `--domain` parameter was not provided, the script checks if an existing `.env` file contains a configured domain. Otherwise, it prompts you interactively — simply press **ENTER** and the script detects your server's public IP (via api.ipify.org or ifconfig.me) and automatically uses the address `[IP-WITH-DASHES].sslip.io`.
 5. **Generate Secrets:** If no `.env` file exists, the script creates a new one and generates cryptographically secure random values for:
    * `POSTGRES_PASSWORD` (password for the local PostgreSQL database)
    * `ENCRYPTION_KEY` (AES-256 key used to encrypt ERP credentials)
