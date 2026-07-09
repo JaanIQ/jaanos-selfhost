@@ -40,12 +40,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Interactive prompt helper. Under `curl … | bash`, stdin is the SCRIPT itself —
-# a plain `read` would consume script text. Read from the terminal instead;
-# if no terminal is available (fully non-interactive), fall back to the default.
+# a plain `read` would consume script text. Read from the terminal instead.
+# A 120s timeout prevents hanging forever in non-interactive contexts (automation,
+# detached shells): after the timeout the sensible default is used and announced.
 ask() {
   local prompt="$1" default="$2" answer=""
   if [ -r /dev/tty ]; then
-    read -rp "$prompt" answer < /dev/tty || true
+    if ! read -t 120 -rp "$prompt" answer < /dev/tty; then
+      echo "" > /dev/tty 2>/dev/null || true
+    fi
   fi
   if [ -z "$answer" ]; then
     answer="$default"
