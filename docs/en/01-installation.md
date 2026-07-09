@@ -48,3 +48,37 @@ The installation script performs the following actions sequentially:
    File permissions of `.env` are protected via `chmod 600`.
 6. **Start Containers:** Pulls the latest Docker images (`ghcr.io/vibebuild-ai/jaanos/suite:latest`, `postgres:16-alpine`, `caddy:2-alpine`, and `containrrr/watchtower`) and starts the stack in the background using `docker compose up -d`.
 7. **System Health Check:** The script performs up to 12 health checks (5-second intervals) to verify if the dashboard is responding. Upon a successful response, it prints the access URL (`https://[DOMAIN]`).
+
+
+---
+
+## Testing on a Server Already in Use (Port Mode)
+
+If a web server (nginx, Apache, Caddy) is already running on your server, ports 80/443 are occupied. The installer **detects this automatically** and offers port mode — JaanOS then runs on its own port without touching your existing services:
+
+```bash
+curl -fsSL https://jaanos.com/install.sh | bash -s -- --port 8321
+```
+
+* Reachable at `http://[SERVER-IP]:8321` — **without SSL** (Let's Encrypt requires ports 80/443). Port mode is intended for **testing**, not for permanent operation over the open internet.
+* No Caddy is started; all containers, volumes, and files stay isolated under `/opt/jaanos`.
+* Clean removal: `cd /opt/jaanos && docker compose down -v && cd / && rm -rf /opt/jaanos` — your existing services keep running untouched.
+* Re-running the installer keeps port mode (stored in `.env` as `INSTALL_MODE=port`).
+
+### Advanced: running behind your existing nginx
+
+You can run JaanOS in port mode permanently by letting your existing web server forward requests and handle the SSL certificate (e.g. via certbot). Example server block:
+
+```nginx
+server {
+    server_name jaanos.your-domain.com;
+    location / {
+        proxy_pass http://127.0.0.1:8321;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+    }
+}
+```
+
+Configuration and certificate management are your responsibility in this case.
