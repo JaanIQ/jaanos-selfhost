@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  jaanos-suite:
+    image: ghcr.io/vibebuild-ai/jaanos/suite:latest
+    container_name: jaanos-suite
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT}:3000"
+    environment:
+      - DATABASE_URL=postgresql://jaanos:${POSTGRES_PASSWORD}@db:5432/jaanos
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_TRUST_HOST=true
+      - NEXT_PUBLIC_APP_URL=http://${DOMAIN}:${APP_PORT}
+      - AUTH_URL=http://${DOMAIN}:${APP_PORT}/api/auth
+      - NEXT_PUBLIC_DEFAULT_ERP=tryton
+      - NEXT_PUBLIC_LOCK_ERP_CONNECTION=false
+      - HUB_RATE_LIMIT_PER_MIN=600
+      - AUTH_LOCAL_ENABLED=true
+      - RUN_MIGRATIONS_ON_BOOT=true
+    networks:
+      - jaanos-net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  db:
+    image: postgres:16-alpine
+    container_name: jaanos-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=jaanos
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=jaanos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - jaanos-net
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: jaanos-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_POLL_INTERVAL=86400
+      - WATCHTOWER_CLEAN_UP=true
+
+volumes:
+  postgres_data:
+
+networks:
+  jaanos-net:
+    driver: bridge
