@@ -10,6 +10,7 @@ set -euo pipefail
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
+YELLOW='033[0;33m'
 NC='\033[0m'
 
 echo -e "${BLUE}🚀 JaanOS Core Self-Hosted Installer${NC}"
@@ -515,38 +516,145 @@ done
 
 # 9.5 Auto-HTTPS setup for nginx if active
 if [ "$PORT_MODE" = true ] && [ "${AUTO_HTTPS:-}" = true ]; then
-  # 1. Install certbot and plugin if needed
-  if ! command -v certbot >/dev/null 2>&1 || ! dpkg -l | grep -q "python3-certbot-nginx" 2>/dev/null; then
-    echo -e "${BLUE}🔧 Installiere certbot und python3-certbot-nginx...${NC}"
+  # SAFETY MODEL: On a busy production server the user's existing sites must NEVER
+  # break. We therefore NEVER let certbot rewrite the user's nginx config. We only
+  # ever ADD our own site file (/etc/nginx/sites-*/jaanos), obtain the certificate
+  # with `certbot certonly --webroot` (which touches NO nginx config), and write the
+  # HTTPS server block ourselves. Every nginx change is gated by `nginx -t` and rolled
+  # back on any failure, so foreign sites are always left exactly as they were.
+
+  # 1. Install certbot if needed (core package only; no nginx plugin — we don't let
+  #    certbot edit nginx). Fallback to the HTTP port if it cannot be installed.
+  if ! command -v certbot >/dev/null 2>&1; then
+    echo -e "${BLUE}Installiere certbot...${NC}"
     if command -v apt-get >/dev/null 2>&1; then
       export DEBIAN_FRONTEND=noninteractive
-      if apt-get update -y && apt-get install -y certbot python3-certbot-nginx; then
-        echo -e "${GREEN}✓ certbot wurde installiert.${NC}"
+      if apt-get update -y >/dev/null 2>&1 && apt-get install -y certbot >/dev/null 2>&1; then
+        echo -e "${GREEN}certbot wurde installiert.${NC}"
       else
-        echo -e "${RED}⚠️ Installation von certbot fehlgeschlagen. Fallback auf HTTP-Port.${NC}"
+        echo -e "${YELLOW}certbot konnte nicht installiert werden. JaanOS läuft weiter über den Port.${NC}"
         AUTO_HTTPS=false
       fi
     else
-      echo -e "${RED}⚠️ apt-get nicht gefunden. Fallback auf HTTP-Port.${NC}"
+      echo -e "${YELLOW}certbot ist nicht verfügbar. JaanOS läuft weiter über den Port.${NC}"
       AUTO_HTTPS=false
     fi
   fi
 
   if [ "${AUTO_HTTPS:-}" = true ]; then
-    # 2. Determine domain
+    # 2. Determine the public hostname. A bare IP gets a free sslip.io name that
+    #    always resolves back to exactly this server, so validation cannot misfire.
     AUTO_HTTPS_DOMAIN="$DOMAIN"
     if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       AUTO_HTTPS_DOMAIN="$(echo "$DOMAIN" | tr '.' '-').sslip.io"
     fi
-    
-    echo -e "${BLUE}🌐 Konfiguriere nginx für ${AUTO_HTTPS_DOMAIN}...${NC}"
-    
-    # Ensure directories exist
-    mkdir -p /etc/nginx/sites-available
-    mkdir -p /etc/nginx/sites-enabled
-    
-    # 3. Create Nginx virtual host
+
+    echo -e "${BLUE}Richte HTTPS für ${AUTO_HTTPS_DOMAIN} ein...${NC}"
+
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+    ACME_WEBROOT=/var/www/jaanos-acme
+    mkdir -p "${ACME_WEBROOT}/.well-known/acme-challenge"
+
+    # 3. Add OUR site only (HTTP). The ACME challenge is served from a private webroot
+    #    so certbot never needs to touch nginx to validate the domain.
     cat <<NGINXTMPL > /etc/nginx/sites-available/jaanos
+server {
+    listen 80;
+    server_name ${AUTO_HTTPS_DOMAIN};
+    location /.well-known/acme-challenge/ {
+        root ${ACME_WEBROOT};
+    }
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+    }
+}
+NGINXTMPL
+    ln -sf /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
+
+    # 4. Validate BEFORE reload. `nginx -t` runs the exact same parser as the reload,
+    #    so if it passes, the graceful reload cannot break the running server.
+    NGINX_OK=false
+    if ! nginx -t >/dev/null 2>&1; then
+      echo -e "${YELLOW}Die Web-Server-Prüfung ist fehlgeschlagen. JaanOS läuft weiter über den Port; Ihre bestehenden Seiten bleiben unverändert.${NC}"
+      rm -f /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
+      AUTO_HTTPS=false
+    elif ! systemctl reload nginx >/dev/null 2>&1; then
+      echo -e "${YELLOW}Der Web-Server konnte nicht neu geladen werden. JaanOS läuft weiter über den Port; Ihre bestehenden Seiten bleiben unverändert.${NC}"
+      rm -f /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
+      systemctl reload nginx >/dev/null 2>&1 || true
+      AUTO_HTTPS=false
+    else
+      NGINX_OK=true
+    fi
+  fi
+
+  if [ "${AUTO_HTTPS:-}" = true ] && [ "${NGINX_OK:-}" = true ]; then
+    # 5. Obtain the certificate WITHOUT touching nginx config (certonly --webroot).
+    #    Idempotency guard: if a valid certificate already exists, reuse it instead of
+    #    calling Let's Encrypt again (avoids rate limits on repeated installs).
+    CERT_LIVE="/etc/letsencrypt/live/${AUTO_HTTPS_DOMAIN}/fullchain.pem"
+    CERT_OK=false
+    if [ -f "$CERT_LIVE" ]; then
+      echo -e "${GREEN}Ein gültiges Zertifikat ist bereits vorhanden und wird verwendet.${NC}"
+      CERT_OK=true
+    else
+      echo -e "${BLUE}Fordere Zertifikat an...${NC}"
+      if certbot certonly --webroot -w "${ACME_WEBROOT}" -d "${AUTO_HTTPS_DOMAIN}" \
+           --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1; then
+        CERT_OK=true
+      fi
+    fi
+
+    if [ "$CERT_OK" = true ] && [ -f "$CERT_LIVE" ]; then
+      # 6. Write the HTTPS block OURSELVES, in our own file only. certbot never edited
+      #    a single line of the user's nginx config.
+      cat <<NGINXSSL > /etc/nginx/sites-available/jaanos
+server {
+    listen 80;
+    server_name ${AUTO_HTTPS_DOMAIN};
+    location /.well-known/acme-challenge/ {
+        root ${ACME_WEBROOT};
+    }
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name ${AUTO_HTTPS_DOMAIN};
+    ssl_certificate /etc/letsencrypt/live/${AUTO_HTTPS_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${AUTO_HTTPS_DOMAIN}/privkey.pem;
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+    }
+}
+NGINXSSL
+
+      if nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1; then
+        echo -e "${GREEN}HTTPS ist aktiv.${NC}"
+        DOMAIN="${AUTO_HTTPS_DOMAIN}"
+        sed -i "s|^DOMAIN=.*|DOMAIN=${AUTO_HTTPS_DOMAIN}|g" .env
+        if grep -q "^AUTO_HTTPS=" .env; then
+          sed -i "s|^AUTO_HTTPS=.*|AUTO_HTTPS=true|g" .env
+        else
+          echo "AUTO_HTTPS=true" >> .env
+        fi
+        # shellcheck disable=SC2016
+        sed -i 's|NEXT_PUBLIC_APP_URL=http://${DOMAIN}:${APP_PORT}|NEXT_PUBLIC_APP_URL=https://${DOMAIN}|g' docker-compose.yml
+        # shellcheck disable=SC2016
+        sed -i 's|AUTH_URL=http://${DOMAIN}:${APP_PORT}/api/auth|AUTH_URL=https://${DOMAIN}/api/auth|g' docker-compose.yml
+        docker compose up -d
+      else
+        # The HTTPS block failed to validate — restore the known-good HTTP-only block
+        # we already reloaded successfully in step 4, so nothing is left degraded.
+        echo -e "${YELLOW}HTTPS konnte nicht aktiviert werden. JaanOS läuft weiter über den Port; Ihre bestehenden Seiten bleiben unverändert.${NC}"
+        cat <<NGINXTMPL > /etc/nginx/sites-available/jaanos
 server {
     listen 80;
     server_name ${AUTO_HTTPS_DOMAIN};
@@ -558,61 +666,19 @@ server {
     }
 }
 NGINXTMPL
-
-    ln -sf /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
-
-    # 4. Validate nginx configuration VOR reload
-    if ! nginx -t >/dev/null 2>&1; then
-      echo -e "${RED}⚠️ Nginx-Konfigurationstest fehlgeschlagen! Rollback wird ausgeführt...${NC}"
-      rm -f /etc/nginx/sites-available/jaanos
-      rm -f /etc/nginx/sites-enabled/jaanos
-      AUTO_HTTPS=false
-    else
-      # Reload nginx
-      if ! systemctl reload nginx >/dev/null 2>&1; then
-        echo -e "${RED}⚠️ Nginx-Reload fehlgeschlagen! Rollback wird ausgeführt...${NC}"
-        rm -f /etc/nginx/sites-available/jaanos
-        rm -f /etc/nginx/sites-enabled/jaanos
-        AUTO_HTTPS=false
-      else
-        echo -e "${GREEN}✓ Nginx-Konfiguration erfolgreich geladen.${NC}"
-        
-        # 5. Run certbot
-        echo -e "${BLUE}🔒 Starte certbot für ${AUTO_HTTPS_DOMAIN}...${NC}"
-        if certbot --nginx -d "${AUTO_HTTPS_DOMAIN}" --non-interactive --agree-tos --register-unsafely-without-email --redirect; then
-          echo -e "${GREEN}✓ HTTPS erfolgreich eingerichtet!${NC}"
-          
-          # 6. Update .env with new domain and compose config
-          DOMAIN="${AUTO_HTTPS_DOMAIN}"
-          sed -i "s|^DOMAIN=.*|DOMAIN=${AUTO_HTTPS_DOMAIN}|g" .env
-          if grep -q "^AUTO_HTTPS=" .env; then
-            sed -i "s|^AUTO_HTTPS=.*|AUTO_HTTPS=true|g" .env
-          else
-            echo "AUTO_HTTPS=true" >> .env
-          fi
-          
-          # Update docker-compose.yml environment variables to match HTTPS
-          # shellcheck disable=SC2016
-          sed -i 's|NEXT_PUBLIC_APP_URL=http://${DOMAIN}:${APP_PORT}|NEXT_PUBLIC_APP_URL=https://${DOMAIN}|g' docker-compose.yml
-          # shellcheck disable=SC2016
-          sed -i 's|AUTH_URL=http://${DOMAIN}:${APP_PORT}/api/auth|AUTH_URL=https://${DOMAIN}/api/auth|g' docker-compose.yml
-          
-          # Relaunch compose to apply new configuration
-          echo -e "${BLUE}♻️ Starte Container neu mit HTTPS-Konfiguration...${NC}"
-          docker compose up -d
-        else
-          echo -e "${RED}⚠️ Certbot-Fehler. Fallback auf HTTP-Port.${NC}"
-          rm -f /etc/nginx/sites-available/jaanos
-          rm -f /etc/nginx/sites-enabled/jaanos
-          systemctl reload nginx >/dev/null 2>&1 || true
-          AUTO_HTTPS=false
-          if grep -q "^AUTO_HTTPS=" .env; then
-            sed -i "s|^AUTO_HTTPS=.*|AUTO_HTTPS=false|g" .env
-          else
-            echo "AUTO_HTTPS=false" >> .env
-          fi
+        if ! nginx -t >/dev/null 2>&1; then
+          rm -f /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
         fi
+        systemctl reload nginx >/dev/null 2>&1 || true
+        AUTO_HTTPS=false
       fi
+    else
+      # No certificate was issued (e.g. DNS not pointed here yet). Remove our site so
+      # the server is exactly as before, and keep JaanOS on its working HTTP port.
+      echo -e "${YELLOW}Es konnte kein Zertifikat ausgestellt werden. JaanOS läuft weiter über den Port; Ihre bestehenden Seiten bleiben unverändert.${NC}"
+      rm -f /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
+      systemctl reload nginx >/dev/null 2>&1 || true
+      AUTO_HTTPS=false
     fi
   fi
 fi
