@@ -96,3 +96,21 @@ JaanOS Core kann optional mit einem vorkonfigurierten, lokalen Tryton ERP als Ko
   Sie können die interaktive Abfrage für das integrierte Tryton überspringen, indem Sie folgende Parameter übergeben:
   * `--with-tryton`: Installiert das Komplettpaket mit Tryton ERP direkt.
   * `--no-tryton`: Installiert ausschließlich JaanOS ohne lokales ERP.
+
+### Tryton direkt öffnen (optional)
+
+Für Entwickler oder fortgeschrittene Administratoren besteht die Möglichkeit, einen direkten, öffentlichen Zugang zum mitgelieferten Tryton ERP freizugeben. Standardmäßig ist dieser Port geschlossen und Tryton läuft nur intern im geschützten Docker-Netzwerk.
+
+* **Was es ist:** Wenn Sie den Port freigeben, serviert der Tryton-Container bei Zugriff über den Browser direkt den offiziellen Sao-Web-Client. Ein Zugriff über den nativen Tryton-Desktop-Client (Gtk) gegen denselben Port ist ebenfalls möglich.
+* **Kein Lock-in:** Es handelt sich um ein absolut unverändertes Standard-Tryton, das auf einer Standard-PostgreSQL-Datenbank läuft. Sie haben vollen Zugriff und können Ihre Daten jederzeit exportieren.
+* **Aktivierung:** 
+  * Nutzen Sie beim Aufruf des Installers das Flag `--expose-tryton [PORT]` (z. B. `--expose-tryton 8069`).
+  * Ohne Flag fragt der Installer interaktiv nach, ob Tryton freigegeben werden soll (Standard: Nein). Der Standard-Port ist `8069`.
+  * Deaktivieren können Sie die Freigabe über das Flag `--no-expose-tryton`.
+* **Login-Daten:**
+  * **Benutzer:** `admin`
+  * **Passwort:** Zu finden in `/opt/jaanos/.env` unter dem Key `BUNDLED_TRYTON_ADMIN_PASSWORD`.
+  * **Datenbank:** `tryton` (muss im Login-Dialog ausgewählt/eingegeben werden).
+* **⚠️ Sicherheitshinweis:**
+  Ein direkt geöffneter Port stellt eine zusätzliche Angriffsfläche im Internet dar. Die Verbindung erfolgt standardmäßig unverschlüsselt (HTTP). Verwenden Sie diesen direkten Port nur für temporäre Testzwecke oder im lokalen Netzwerk. Für den dauerhaften Betrieb im Internet wird dringend empfohlen, den Port geschlossen zu halten (Zugriff nur über JaanOS) oder den Port mit SSL abzusichern, indem Sie ihn hinter Ihren bestehenden Webserver (z. B. nginx) als Reverse-Proxy legen (siehe nginx-Vorlage).
+

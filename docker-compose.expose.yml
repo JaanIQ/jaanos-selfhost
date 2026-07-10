@@ -1,0 +1,4 @@
+services:
+  tryton:
+    ports:
+      - "${TRYTON_EXPOSE_PORT:-8069}:8000"

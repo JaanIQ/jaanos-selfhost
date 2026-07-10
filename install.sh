@@ -20,6 +20,8 @@ DOMAIN=""
 APP_PORT=""
 PORT_MODE=""
 WITH_TRYTON=""
+EXPOSE_TRYTON=""
+TRYTON_EXPOSE_PORT=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -39,6 +41,19 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-tryton)
       WITH_TRYTON=false
+      shift 1
+      ;;
+    --expose-tryton)
+      EXPOSE_TRYTON=true
+      if [[ $# -gt 1 && "$2" =~ ^[0-9]+$ ]]; then
+        TRYTON_EXPOSE_PORT="$2"
+        shift 2
+      else
+        shift 1
+      fi
+      ;;
+    --no-expose-tryton)
+      EXPOSE_TRYTON=false
       shift 1
       ;;
     *)
@@ -93,6 +108,20 @@ if [ -z "$WITH_TRYTON" ]; then
       WITH_TRYTON=true
     elif [ "$EXISTING_TRYTON" = "false" ]; then
       WITH_TRYTON=false
+    fi
+  fi
+fi
+
+# Respect existing expose tryton choice if not overridden by CLI flags
+if [ -z "$EXPOSE_TRYTON" ]; then
+  if [ -f .env ]; then
+    if grep -E "^TRYTON_EXPOSE_PORT=" .env >/dev/null 2>&1 || grep -q "docker-compose.expose.yml" .env 2>/dev/null; then
+      EXPOSE_TRYTON=true
+      if [ -z "$TRYTON_EXPOSE_PORT" ]; then
+        TRYTON_EXPOSE_PORT=$(grep -E "^TRYTON_EXPOSE_PORT=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+      fi
+    else
+      EXPOSE_TRYTON=false
     fi
   fi
 fi
@@ -184,6 +213,34 @@ if [ -z "$WITH_TRYTON" ]; then
   fi
 fi
 
+if [ "$WITH_TRYTON" = false ]; then
+  EXPOSE_TRYTON=false
+fi
+
+# 4.6 Ask Tryton expose question if Tryton is enabled and choice not resolved
+if [ "$WITH_TRYTON" = true ] && [ -z "$EXPOSE_TRYTON" ]; then
+  echo ""
+  echo "Tryton-Weboberfläche direkt im Browser erreichbar machen?"
+  echo "Ein offener Port ist zusätzliche Angriffsfläche; für den Dauerbetrieb hinter Ihren Reverse-Proxy mit SSL legen."
+  CHOOSE_EXPOSE=$(ask "Tryton-Weboberfläche direkt im Browser erreichbar machen? (j/N) — Standard: nur über JaanOS: " "N")
+  if [[ "$CHOOSE_EXPOSE" =~ ^[JjYy] ]]; then
+    EXPOSE_TRYTON=true
+  else
+    EXPOSE_TRYTON=false
+  fi
+fi
+
+if [ "${EXPOSE_TRYTON:-}" = true ]; then
+  if [ -z "${TRYTON_EXPOSE_PORT:-}" ]; then
+    USER_EXPOSE_PORT=$(ask "Gewünschter Tryton-Port [Default: 8069]: " "8069")
+    if [[ ! "$USER_EXPOSE_PORT" =~ ^[0-9]+$ ]]; then
+      echo -e "${RED}Fehler: Ungültiger Port.${NC}"
+      exit 1
+    fi
+    TRYTON_EXPOSE_PORT="$USER_EXPOSE_PORT"
+  fi
+fi
+
 # 5. Download Stack Configurations (from main — single source of truth)
 echo -e "${BLUE}📥 Downloading stack configurations...${NC}"
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
@@ -196,6 +253,9 @@ if [ "${TEST_MODE_LOCAL_CONFIG:-false}" = "true" ] && [ -f "$SCRIPT_DIR/docker-c
     cp "$SCRIPT_DIR/docker-compose.yml" ./docker-compose.yml
     cp "$SCRIPT_DIR/Caddyfile" ./Caddyfile
   fi
+  if [ "$EXPOSE_TRYTON" = true ] && [ -f "$SCRIPT_DIR/docker-compose.expose.yml" ]; then
+    cp "$SCRIPT_DIR/docker-compose.expose.yml" ./docker-compose.expose.yml
+  fi
 else
   if [ "$PORT_MODE" = true ]; then
     curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.port.yml -o docker-compose.yml
@@ -203,6 +263,9 @@ else
   else
     curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.yml -o docker-compose.yml
     curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/Caddyfile -o Caddyfile
+  fi
+  if [ "$EXPOSE_TRYTON" = true ]; then
+    curl -fsSL https://raw.githubusercontent.com/JaanIQ/jaanos-selfhost/main/docker-compose.expose.yml -o docker-compose.expose.yml
   fi
 fi
 
@@ -243,7 +306,7 @@ fi
 if [ -f .env ]; then
   echo "Existing .env file found. Preserving all keys."
   temp_file=$(mktemp)
-  grep -E -v "^(DOMAIN|INSTALL_MODE|APP_PORT|BUNDLED_TRYTON|BUNDLED_TRYTON_URL|BUNDLED_TRYTON_DB|BUNDLED_TRYTON_ADMIN_USER|BUNDLED_TRYTON_ADMIN_PASSWORD|COMPOSE_PROFILES)=" .env > "$temp_file" || true
+  grep -E -v "^(DOMAIN|INSTALL_MODE|APP_PORT|BUNDLED_TRYTON|BUNDLED_TRYTON_URL|BUNDLED_TRYTON_DB|BUNDLED_TRYTON_ADMIN_USER|BUNDLED_TRYTON_ADMIN_PASSWORD|COMPOSE_PROFILES|TRYTON_EXPOSE_PORT|COMPOSE_FILE)=" .env > "$temp_file" || true
 
   echo "DOMAIN=${DOMAIN}" >> "$temp_file"
   if [ "$PORT_MODE" = true ]; then
@@ -260,9 +323,16 @@ if [ -f .env ]; then
     echo "BUNDLED_TRYTON_ADMIN_USER=admin" >> "$temp_file"
     echo "BUNDLED_TRYTON_ADMIN_PASSWORD=${BUNDLED_TRYTON_PASS}" >> "$temp_file"
     echo "COMPOSE_PROFILES=tryton" >> "$temp_file"
+    if [ "$EXPOSE_TRYTON" = true ]; then
+      echo "TRYTON_EXPOSE_PORT=${TRYTON_EXPOSE_PORT}" >> "$temp_file"
+      echo "COMPOSE_FILE=docker-compose.yml:docker-compose.expose.yml" >> "$temp_file"
+    else
+      echo "COMPOSE_FILE=docker-compose.yml" >> "$temp_file"
+    fi
   else
     echo "BUNDLED_TRYTON=false" >> "$temp_file"
     echo "COMPOSE_PROFILES=" >> "$temp_file"
+    echo "COMPOSE_FILE=docker-compose.yml" >> "$temp_file"
   fi
 
   mv "$temp_file" .env
@@ -300,10 +370,21 @@ BUNDLED_TRYTON_ADMIN_USER=admin
 BUNDLED_TRYTON_ADMIN_PASSWORD=${BUNDLED_TRYTON_PASS}
 COMPOSE_PROFILES=tryton
 EOF
+    if [ "$EXPOSE_TRYTON" = true ]; then
+      cat <<EOF >> .env
+TRYTON_EXPOSE_PORT=${TRYTON_EXPOSE_PORT}
+COMPOSE_FILE=docker-compose.yml:docker-compose.expose.yml
+EOF
+    else
+      cat <<EOF >> .env
+COMPOSE_FILE=docker-compose.yml
+EOF
+    fi
   else
     cat <<EOF >> .env
 BUNDLED_TRYTON=false
 COMPOSE_PROFILES=
+COMPOSE_FILE=docker-compose.yml
 EOF
   fi
   chmod 600 .env
@@ -410,6 +491,14 @@ if [ "$PORT_MODE" = true ]; then
   echo ""
   echo "Bis dahin: Verbindung ist unverschlüsselt (HTTP) — für den offenen"
   echo "Internet-Zugriff bitte erst den HTTPS-Schritt abschließen."
+  echo ""
+  if [ "$EXPOSE_TRYTON" = true ]; then
+    echo "Tryton direkt: http://${DOMAIN}:${TRYTON_EXPOSE_PORT}/ —"
+    echo "Login: Benutzer 'admin', Passwort steht in /opt/jaanos/.env (BUNDLED_TRYTON_ADMIN_PASSWORD),"
+    echo "Datenbank 'tryton' wählen. ⚠️ Ungeschützt (HTTP, offener Port) — nur zum Ansehen/lokal;"
+    echo "für den Dauerbetrieb hinter SSL/Reverse-Proxy."
+    echo ""
+  fi
 else
   echo -e "${GREEN}🎉 JaanOS Core is running!${NC}"
   echo -e "Access it here: ${BLUE}https://${DOMAIN}${NC}"
@@ -417,6 +506,13 @@ else
     echo ""
     echo "Integriertes Tryton wird im Hintergrund eingerichtet (einige Minuten) —"
     echo "Sie können sich schon registrieren; das ERP verbinden Sie im Assistenten mit einem Klick."
+  fi
+  if [ "$EXPOSE_TRYTON" = true ]; then
+    echo ""
+    echo "Tryton direkt: http://${DOMAIN}:${TRYTON_EXPOSE_PORT}/ —"
+    echo "Login: Benutzer 'admin', Passwort steht in /opt/jaanos/.env (BUNDLED_TRYTON_ADMIN_PASSWORD),"
+    echo "Datenbank 'tryton' wählen. ⚠️ Ungeschützt (HTTP, offener Port) — nur zum Ansehen/lokal;"
+    echo "für den Dauerbetrieb hinter SSL/Reverse-Proxy."
   fi
 fi
 echo "================================================="

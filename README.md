@@ -26,6 +26,8 @@ Der Installer bietet Ihnen interaktiv an, ein vorkonfiguriertes, lokales Tryton 
 * **Sicherheit:** Das Tryton ERP ist **nicht** öffentlich erreichbar, sondern läuft ausschließlich im geschützten Docker-Netzwerk. Nur JaanOS kommuniziert direkt mit ihm.
 * **Ersteinrichtung:** Die Datenbank und Module (u. a. SKR03-Kontenrahmen und Steuerschlüssel) werden vollautomatisch beim ersten Start eingerichtet (ca. 2-3 Minuten).
 * **Automatisierung:** Nutzen Sie `--with-tryton` oder `--no-tryton` beim Aufruf des Installers, um die interaktive Abfrage zu überspringen.
+* **Tryton direkt öffnen (optional):** Sie können Tryton über einen frei wählbaren Host-Port (Standard: `8069`) freigeben, um direkt auf den Sao-Web-Client oder den Desktop-Gtk-Client zuzugreifen. Verwenden Sie hierzu das Flag `--expose-tryton [PORT]` (z. B. `--expose-tryton 8069`) bzw. interaktiv die Bestätigung. Zum Deaktivieren nutzen Sie `--no-expose-tryton`. ⚠️ **Sicherheitshinweis:** Ein offener Port erhöht die Angriffsfläche. Standardmäßig läuft Tryton sicher nur intern. Details und Login-Informationen finden Sie in der [Installationsanleitung](docs/de/01-installation.md#tryton-direkt-offnen-optional).
+
 
 
 ---
