@@ -52,9 +52,9 @@ Das Installationsskript führt nacheinander folgende Aktionen aus:
 
 ---
 
-## Testen auf einem bereits genutzten Server (Port-Modus)
+## Installation auf einem Server mit bestehendem Webserver (Port-Modus)
 
-Läuft auf Ihrem Server bereits ein Webserver (nginx, Apache, Caddy), sind die Ports 80/443 belegt. Der Installer **erkennt das automatisch** und bietet den Test-Modus an — JaanOS läuft dann auf einem eigenen Port, ohne die bestehenden Dienste zu berühren:
+Läuft auf Ihrem Server bereits ein Webserver (nginx, Apache, Caddy), sind die Ports 80/443 belegt. Der Installer **erkennt das automatisch** und richtet JaanOS auf einem eigenen Port ein — eine vollständige, dauerhafte Installation, ohne die bestehenden Dienste zu berühren:
 
 ```bash
 curl -fsSL https://jaanos.com/install.sh | bash -s -- --port 8321
@@ -112,5 +112,5 @@ Für Entwickler oder fortgeschrittene Administratoren besteht die Möglichkeit, 
   * **Passwort:** Zu finden in `/opt/jaanos/.env` unter dem Key `BUNDLED_TRYTON_ADMIN_PASSWORD`.
   * **Datenbank:** `tryton` (muss im Login-Dialog ausgewählt/eingegeben werden).
 * **⚠️ Sicherheitshinweis:**
-  Ein direkt geöffneter Port stellt eine zusätzliche Angriffsfläche im Internet dar. Die Verbindung erfolgt standardmäßig unverschlüsselt (HTTP). Verwenden Sie diesen direkten Port nur für temporäre Testzwecke oder im lokalen Netzwerk. Für den dauerhaften Betrieb im Internet wird dringend empfohlen, den Port geschlossen zu halten (Zugriff nur über JaanOS) oder den Port mit SSL abzusichern, indem Sie ihn hinter Ihren bestehenden Webserver (z. B. nginx) als Reverse-Proxy legen (siehe nginx-Vorlage).
+  Ein direkt geöffneter Port stellt eine zusätzliche Angriffsfläche im Internet dar. Die Verbindung erfolgt standardmäßig unverschlüsselt (HTTP). Betreiben Sie diesen direkten Port nur im lokalen Netzwerk oder abgesichert hinter TLS. Für den dauerhaften Betrieb im Internet wird dringend empfohlen, den Port geschlossen zu halten (Zugriff nur über JaanOS) oder den Port mit SSL abzusichern, indem Sie ihn hinter Ihren bestehenden Webserver (z. B. nginx) als Reverse-Proxy legen (siehe nginx-Vorlage).
 

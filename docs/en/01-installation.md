@@ -52,9 +52,9 @@ The installation script performs the following actions sequentially:
 
 ---
 
-## Testing on a Server Already in Use (Port Mode)
+## Installation on a Server with an Existing Web Server (Port Mode)
 
-If a web server (nginx, Apache, Caddy) is already running on your server, ports 80/443 are occupied. The installer **detects this automatically** and offers port mode — JaanOS then runs on its own port without touching your existing services:
+If a web server (nginx, Apache, Caddy) is already running on your server, ports 80/443 are occupied. The installer **detects this automatically** and sets JaanOS up on its own port — a complete, permanent installation, without touching your existing services:
 
 ```bash
 curl -fsSL https://jaanos.com/install.sh | bash -s -- --port 8321
@@ -112,6 +112,6 @@ For developers or advanced administrators, there is an option to expose direct p
   * **Password:** Can be found in `/opt/jaanos/.env` under the `BUNDLED_TRYTON_ADMIN_PASSWORD` key.
   * **Database:** `tryton` (must be selected/entered in the login dialog).
 * **⚠️ Security Warning:**
-  Exposing this port directly to the internet increases your system's attack surface. By default, the connection is unencrypted (HTTP). Only use the exposed port for temporary testing or within a local network. For permanent production use, it is highly recommended to keep the port closed (routing all access through JaanOS) or secure the endpoint with SSL by setting up a reverse proxy (e.g., using nginx) behind your web server.
+  Exposing this port directly to the internet increases your system's attack surface. By default, the connection is unencrypted (HTTP). Only run this exposed port within a local network or secured behind TLS. For permanent production use, it is highly recommended to keep the port closed (routing all access through JaanOS) or secure the endpoint with SSL by setting up a reverse proxy (e.g., using nginx) behind your web server.
 
 
