@@ -474,52 +474,42 @@ fi
 
 echo "================================================="
 if [ "$PORT_MODE" = true ]; then
-  echo -e "${GREEN}🎉 JaanOS läuft → http://${DOMAIN}:${APP_PORT}${NC}"
+  echo -e "${GREEN}🎉 Geschafft! JaanOS läuft.${NC}"
   echo ""
-  echo "Diese Installation ist vollwertig und dauerhaft: Daten bleiben erhalten,"
-  echo "Updates laufen automatisch. Es fehlt nur noch SSL obendrauf."
-  echo ""
+  echo -e "   Jetzt im Browser öffnen:   ${BLUE}http://${DOMAIN}:${APP_PORT}${NC}"
   if [ "$WITH_TRYTON" = true ]; then
-    echo "Integriertes Tryton wird im Hintergrund eingerichtet (einige Minuten) —"
-    echo "Sie können sich schon registrieren; das ERP verbinden Sie im Assistenten mit einem Klick."
     echo ""
+    echo "   Ihr ERP wird im Hintergrund eingerichtet (ein paar Minuten). Sie können"
+    echo "   sich schon registrieren und es dann mit einem Klick verbinden."
   fi
-  echo "Für HTTPS über Ihre Domain (ein Schritt, kein Neuaufsetzen):"
-  echo "Fertige Vorlage für Ihren bestehenden Webserver liegt bereit unter"
-  echo "  /opt/jaanos/nginx-jaanos.conf.example"
-  echo "(Domain eintragen, aktivieren, certbot ausführen — Anleitung steht in der Datei.)"
-  echo ""
-  echo "Bis dahin: Verbindung ist unverschlüsselt (HTTP) — für den offenen"
-  echo "Internet-Zugriff bitte erst den HTTPS-Schritt abschließen."
-  echo ""
   if [ "$EXPOSE_TRYTON" = true ]; then
-    echo "Tryton direkt: http://${DOMAIN}:${TRYTON_EXPOSE_PORT}/ —"
-    echo "Login: Benutzer 'admin', Passwort steht in /opt/jaanos/.env (BUNDLED_TRYTON_ADMIN_PASSWORD),"
-    echo "Datenbank 'tryton' wählen. ⚠️ Ungeschützt (HTTP, offener Port) — nur zum Ansehen/lokal;"
-    echo "für den Dauerbetrieb hinter SSL/Reverse-Proxy."
     echo ""
+    echo -e "   Tryton direkt:             ${BLUE}http://${DOMAIN}:${TRYTON_EXPOSE_PORT}${NC}"
+    echo "   (Benutzer: admin · Passwort: grep BUNDLED_TRYTON_ADMIN_PASSWORD /opt/jaanos/.env · DB: tryton)"
   elif [ "$WITH_TRYTON" = true ]; then
-    echo "Ihr Tryton läuft intern (Zugriff nur über JaanOS). Die Tryton-Weboberfläche"
-    echo "können Sie jederzeit direkt freischalten:  bash install.sh --expose-tryton 8069"
     echo ""
+    echo "   Tipp: Tryton direkt öffnen? Später:  bash install.sh --expose-tryton 8069"
   fi
+  echo ""
+  echo "   Läuft unverschlüsselt (HTTP) — ideal zum Testen und im eigenen Netz."
+  echo "   Für den Dauerbetrieb übers Internet später mit SSL absichern (siehe Doku)."
 else
-  echo -e "${GREEN}🎉 JaanOS Core is running!${NC}"
-  echo -e "Access it here: ${BLUE}https://${DOMAIN}${NC}"
+  echo -e "${GREEN}🎉 Geschafft! JaanOS läuft.${NC}"
+  echo ""
+  echo -e "   Jetzt im Browser öffnen:   ${BLUE}https://${DOMAIN}${NC}"
   if [ "$WITH_TRYTON" = true ]; then
     echo ""
-    echo "Integriertes Tryton wird im Hintergrund eingerichtet (einige Minuten) —"
-    echo "Sie können sich schon registrieren; das ERP verbinden Sie im Assistenten mit einem Klick."
+    echo "   Ihr ERP wird im Hintergrund eingerichtet (ein paar Minuten). Sie können"
+    echo "   sich schon registrieren und es dann mit einem Klick verbinden."
   fi
   if [ "$EXPOSE_TRYTON" = true ]; then
     echo ""
-    echo "Tryton direkt: http://${DOMAIN}:${TRYTON_EXPOSE_PORT}/ —"
-    echo "Login: Benutzer 'admin', Passwort steht in /opt/jaanos/.env (BUNDLED_TRYTON_ADMIN_PASSWORD),"
-    echo "Datenbank 'tryton' wählen. ⚠️ Ungeschützt (HTTP, offener Port) — nur zum Ansehen/lokal;"
-    echo "für den Dauerbetrieb hinter SSL/Reverse-Proxy."
+    echo -e "   Tryton direkt:             ${BLUE}http://${DOMAIN}:${TRYTON_EXPOSE_PORT}${NC}"
+    echo "   (Benutzer: admin · Passwort: grep BUNDLED_TRYTON_ADMIN_PASSWORD /opt/jaanos/.env · DB: tryton)"
+    echo "   Offener Port — für Dauerbetrieb übers Internet mit SSL absichern."
   elif [ "$WITH_TRYTON" = true ]; then
-    echo "Ihr Tryton läuft intern (Zugriff nur über JaanOS). Die Tryton-Weboberfläche"
-    echo "können Sie jederzeit direkt freischalten:  bash install.sh --expose-tryton 8069"
+    echo ""
+    echo "   Tipp: Tryton direkt öffnen? Später:  bash install.sh --expose-tryton 8069"
   fi
 fi
 echo "================================================="
