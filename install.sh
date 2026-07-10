@@ -498,6 +498,10 @@ if [ "$PORT_MODE" = true ]; then
     echo "Datenbank 'tryton' wählen. ⚠️ Ungeschützt (HTTP, offener Port) — nur zum Ansehen/lokal;"
     echo "für den Dauerbetrieb hinter SSL/Reverse-Proxy."
     echo ""
+  elif [ "$WITH_TRYTON" = true ]; then
+    echo "Ihr Tryton läuft intern (Zugriff nur über JaanOS). Die Tryton-Weboberfläche"
+    echo "können Sie jederzeit direkt freischalten:  bash install.sh --expose-tryton 8069"
+    echo ""
   fi
 else
   echo -e "${GREEN}🎉 JaanOS Core is running!${NC}"
@@ -513,6 +517,9 @@ else
     echo "Login: Benutzer 'admin', Passwort steht in /opt/jaanos/.env (BUNDLED_TRYTON_ADMIN_PASSWORD),"
     echo "Datenbank 'tryton' wählen. ⚠️ Ungeschützt (HTTP, offener Port) — nur zum Ansehen/lokal;"
     echo "für den Dauerbetrieb hinter SSL/Reverse-Proxy."
+  elif [ "$WITH_TRYTON" = true ]; then
+    echo "Ihr Tryton läuft intern (Zugriff nur über JaanOS). Die Tryton-Weboberfläche"
+    echo "können Sie jederzeit direkt freischalten:  bash install.sh --expose-tryton 8069"
   fi
 fi
 echo "================================================="
