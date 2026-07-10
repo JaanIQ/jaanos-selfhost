@@ -50,6 +50,10 @@ services:
       - WATCHTOWER_LABEL_ENABLE=true
       - WATCHTOWER_POLL_INTERVAL=86400
       - WATCHTOWER_CLEAN_UP=true
+      # The watchtower image ships an outdated Docker client (API 1.25); modern
+      # Docker engines (>= 25) reject it and auto-update silently dies in an
+      # error loop. Forcing the API version keeps self-updates alive.
+      - DOCKER_API_VERSION=1.44
 
   tryton:
     image: tryton/tryton:7.0
