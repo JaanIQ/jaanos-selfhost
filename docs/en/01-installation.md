@@ -97,3 +97,21 @@ JaanOS Core can optionally be installed alongside a pre-configured, local Tryton
   * `--with-tryton`: Automatically installs the complete bundle with Tryton ERP.
   * `--no-tryton`: Installs only JaanOS without the local Tryton ERP.
 
+### Opening Tryton Directly (Optional)
+
+For developers or advanced administrators, there is an option to expose direct public access to the bundled Tryton ERP instance. By default, this port is closed, and Tryton runs only internally within the secure Docker network.
+
+* **What it is:** When the port is exposed, accessing it via a web browser serves the official Sao web client. Direct connection using the native Tryton desktop client (Gtk) is also supported through the same port.
+* **No Lock-in:** This is an unmodified, standard Tryton instance running on a standard PostgreSQL database. You have full ownership and control of your data, with no vendor lock-in.
+* **Activation:**
+  * Pass the `--expose-tryton [PORT]` flag to the installer (e.g., `--expose-tryton 8069`).
+  * If no flag is passed, the installer prompts you interactively (Default: No). The default port is `8069`.
+  * You can explicitly disable exposing Tryton using the `--no-expose-tryton` flag.
+* **Login Credentials:**
+  * **User:** `admin`
+  * **Password:** Can be found in `/opt/jaanos/.env` under the `BUNDLED_TRYTON_ADMIN_PASSWORD` key.
+  * **Database:** `tryton` (must be selected/entered in the login dialog).
+* **⚠️ Security Warning:**
+  Exposing this port directly to the internet increases your system's attack surface. By default, the connection is unencrypted (HTTP). Only use the exposed port for temporary testing or within a local network. For permanent production use, it is highly recommended to keep the port closed (routing all access through JaanOS) or secure the endpoint with SSL by setting up a reverse proxy (e.g., using nginx) behind your web server.
+
+
