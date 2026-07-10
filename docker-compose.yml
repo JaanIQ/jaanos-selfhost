@@ -77,6 +77,10 @@ services:
       - db
     environment:
       - TRYTOND_DATABASE__URI=postgresql://jaanos:${POSTGRES_PASSWORD}@db:5432/
+      # Creating the German chart of accounts (~1200 SKR03 accounts) during
+      # onboarding takes minutes; gunicorn's default 30s worker timeout would
+      # kill the request mid-transaction.
+      - GUNICORN_CMD_ARGS=--timeout 300
     networks:
       - jaanos-net
 
