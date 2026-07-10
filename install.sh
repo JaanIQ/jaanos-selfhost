@@ -549,6 +549,16 @@ if [ "$PORT_MODE" = true ] && [ "${AUTO_HTTPS:-}" = true ]; then
       AUTO_HTTPS_DOMAIN="$(echo "$DOMAIN" | tr '.' '-').sslip.io"
     fi
 
+    # Direct Tryton access gets its own HTTPS hostname through the same nginx —
+    # a subdomain of the app hostname (sslip.io resolves any name containing the
+    # IP, so tryton.<ip-dashes>.sslip.io needs no DNS setup either). If the cert
+    # for it cannot be issued (e.g. own domain without a tryton. DNS record),
+    # Tryton simply stays on its plain port — never fatal.
+    TRYTON_HTTPS_DOMAIN=""
+    if [ "${EXPOSE_TRYTON:-}" = true ] && [ -n "${TRYTON_EXPOSE_PORT:-}" ]; then
+      TRYTON_HTTPS_DOMAIN="tryton.${AUTO_HTTPS_DOMAIN}"
+    fi
+
     echo -e "${BLUE}Richte HTTPS für ${AUTO_HTTPS_DOMAIN} ein...${NC}"
 
     mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
@@ -560,7 +570,7 @@ if [ "$PORT_MODE" = true ] && [ "${AUTO_HTTPS:-}" = true ]; then
     cat <<NGINXTMPL > /etc/nginx/sites-available/jaanos
 server {
     listen 80;
-    server_name ${AUTO_HTTPS_DOMAIN};
+    server_name ${AUTO_HTTPS_DOMAIN} ${TRYTON_HTTPS_DOMAIN};
     location /.well-known/acme-challenge/ {
         root ${ACME_WEBROOT};
     }
@@ -608,6 +618,20 @@ NGINXTMPL
       fi
     fi
 
+    # Own certificate for the direct Tryton hostname (same safe webroot method;
+    # a failure here never affects the app's HTTPS — Tryton then stays on its port).
+    TRYTON_HTTPS_OK=false
+    if [ "$CERT_OK" = true ] && [ -n "$TRYTON_HTTPS_DOMAIN" ]; then
+      TRYTON_CERT_LIVE="/etc/letsencrypt/live/${TRYTON_HTTPS_DOMAIN}/fullchain.pem"
+      if [ -f "$TRYTON_CERT_LIVE" ]; then
+        TRYTON_HTTPS_OK=true
+      elif certbot certonly --webroot -w "${ACME_WEBROOT}" -d "${TRYTON_HTTPS_DOMAIN}" \
+             --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1 \
+           && [ -f "$TRYTON_CERT_LIVE" ]; then
+        TRYTON_HTTPS_OK=true
+      fi
+    fi
+
     if [ "$CERT_OK" = true ] && [ -f "$CERT_LIVE" ]; then
       # 6. Write the HTTPS block OURSELVES, in our own file only. certbot never edited
       #    a single line of the user's nginx config.
@@ -635,6 +659,35 @@ server {
     }
 }
 NGINXSSL
+
+      # Direct Tryton access over HTTPS too — appended only when its cert exists.
+      # (The port-80 block keeps serving the ACME challenge so renewals keep working.)
+      if [ "${TRYTON_HTTPS_OK:-}" = true ]; then
+        cat <<NGINXTRYTON >> /etc/nginx/sites-available/jaanos
+server {
+    listen 80;
+    server_name ${TRYTON_HTTPS_DOMAIN};
+    location /.well-known/acme-challenge/ {
+        root ${ACME_WEBROOT};
+    }
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name ${TRYTON_HTTPS_DOMAIN};
+    ssl_certificate /etc/letsencrypt/live/${TRYTON_HTTPS_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${TRYTON_HTTPS_DOMAIN}/privkey.pem;
+    location / {
+        proxy_pass http://127.0.0.1:${TRYTON_EXPOSE_PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+    }
+}
+NGINXTRYTON
+      fi
 
       if nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1; then
         echo -e "${GREEN}HTTPS ist aktiv.${NC}"
@@ -727,7 +780,11 @@ echo -e "  ${GREEN}JaanOS ist bereit.${NC}"
 echo ""
 echo -e "    Oberfläche        ${BLUE}${ACCESS_URL}${NC}"
 if [ "$EXPOSE_TRYTON" = true ]; then
-  echo -e "    Tryton            ${BLUE}http://${DOMAIN}:${TRYTON_EXPOSE_PORT}${NC}"
+  if [ "${AUTO_HTTPS:-}" = true ] && [ "${TRYTON_HTTPS_OK:-}" = true ]; then
+    echo -e "    Tryton            ${BLUE}https://${TRYTON_HTTPS_DOMAIN}${NC}"
+  else
+    echo -e "    Tryton            ${BLUE}http://${DOMAIN}:${TRYTON_EXPOSE_PORT}${NC}"
+  fi
   echo    "                      Benutzer admin · Passwort in /opt/jaanos/.env · Datenbank tryton"
 fi
 echo ""
@@ -742,7 +799,7 @@ fi
 if [ "$PORT_MODE" = true ] && [ "${AUTO_HTTPS:-}" != true ]; then
   echo "    Die Verbindung ist noch nicht verschlüsselt. Solange Sie JaanOS im eigenen"
   echo "    Netz nutzen, ist alles gut; für den öffentlichen Zugriff später absichern."
-elif [ "$EXPOSE_TRYTON" = true ]; then
+elif [ "$EXPOSE_TRYTON" = true ] && [ "${TRYTON_HTTPS_OK:-}" != true ]; then
   echo "    Der direkte Tryton-Zugang ist noch nicht verschlüsselt — im eigenen Netz"
   echo "    unbedenklich; für den öffentlichen Zugriff später absichern."
 fi
