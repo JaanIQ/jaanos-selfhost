@@ -161,6 +161,15 @@ if [ "$PORT_MODE" = true ]; then
   if [ -z "$APP_PORT" ]; then
     APP_PORT=8321
   fi
+  if command -v ss >/dev/null 2>&1; then
+    _app_req="$APP_PORT"
+    while ss -tln | grep -q -E ":${APP_PORT}([^0-9]|$)" && [ "$APP_PORT" -lt 65500 ]; do
+      APP_PORT=$((APP_PORT + 1))
+    done
+    if [ "$APP_PORT" != "$_app_req" ]; then
+      echo "   Port ${_app_req} ist bereits belegt. JaanOS wird stattdessen auf Port ${APP_PORT} bereitgestellt."
+    fi
+  fi
   if [ -z "$DOMAIN" ]; then
     DOMAIN=$(get_public_ip)
     if [ -z "$DOMAIN" ]; then
@@ -238,6 +247,21 @@ if [ "${EXPOSE_TRYTON:-}" = true ]; then
       exit 1
     fi
     TRYTON_EXPOSE_PORT="$USER_EXPOSE_PORT"
+  fi
+fi
+
+# 4.7 If exposing Tryton, make sure the chosen port is free — otherwise pick the next
+# free one (a busy server may already use 8069, e.g. another Tryton/Odoo instance).
+if [ "${EXPOSE_TRYTON:-}" = true ] && command -v ss >/dev/null 2>&1; then
+  _p="${TRYTON_EXPOSE_PORT:-8069}"
+  _tries=0
+  while ss -tln | grep -q -E ":${_p}\b" && [ "$_tries" -lt 50 ]; do
+    _p=$((_p + 1))
+    _tries=$((_tries + 1))
+  done
+  if [ "$_p" != "${TRYTON_EXPOSE_PORT:-8069}" ]; then
+    echo "   Port ${TRYTON_EXPOSE_PORT:-8069} ist bereits belegt. Tryton wird stattdessen auf Port ${_p} bereitgestellt."
+    TRYTON_EXPOSE_PORT="$_p"
   fi
 fi
 
