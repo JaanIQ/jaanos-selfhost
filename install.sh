@@ -229,9 +229,9 @@ fi
 # 4.6 Ask Tryton expose question if Tryton is enabled and choice not resolved
 if [ "$WITH_TRYTON" = true ] && [ -z "$EXPOSE_TRYTON" ]; then
   echo ""
-  echo "Tryton-Weboberfläche direkt im Browser erreichbar machen?"
-  echo "Ein offener Port ist zusätzliche Angriffsfläche; für den Dauerbetrieb hinter Ihren Reverse-Proxy mit SSL legen."
-  CHOOSE_EXPOSE=$(ask "Tryton-Weboberfläche direkt im Browser erreichbar machen? (j/N) — Standard: nur über JaanOS: " "N")
+  echo "Standardmäßig erreichen Sie Tryton bequem über JaanOS — das genügt für die"
+  echo "meisten. Möchten Sie Tryton zusätzlich direkt im Browser öffnen können?"
+  CHOOSE_EXPOSE=$(ask "Tryton direkt öffnen? (j/N): " "N")
   if [[ "$CHOOSE_EXPOSE" =~ ^[JjYy] ]]; then
     EXPOSE_TRYTON=true
   else
@@ -520,10 +520,10 @@ if [ "$WITH_TRYTON" = true ]; then
   echo ""
 fi
 if [ "$PORT_MODE" = true ]; then
-  echo "    Die Verbindung läuft über HTTP. Für den Zugriff aus dem Internet ergänzen"
-  echo "    Sie TLS — die Schritte stehen in der Dokumentation."
+  echo "    Die Verbindung ist noch nicht verschlüsselt. Solange Sie JaanOS im eigenen"
+  echo "    Netz nutzen, ist alles gut; für den öffentlichen Zugriff später absichern."
 elif [ "$EXPOSE_TRYTON" = true ]; then
-  echo "    Der direkte Tryton-Zugang läuft über HTTP. Für den Zugriff aus dem Internet"
-  echo "    ergänzen Sie dort TLS — die Schritte stehen in der Dokumentation."
+  echo "    Der direkte Tryton-Zugang ist noch nicht verschlüsselt — im eigenen Netz"
+  echo "    unbedenklich; für den öffentlichen Zugriff später absichern."
 fi
 echo ""
