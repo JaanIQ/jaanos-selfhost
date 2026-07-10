@@ -22,6 +22,7 @@ PORT_MODE=""
 WITH_TRYTON=""
 EXPOSE_TRYTON=""
 TRYTON_EXPOSE_PORT=""
+AUTO_HTTPS=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -54,6 +55,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-expose-tryton)
       EXPOSE_TRYTON=false
+      shift 1
+      ;;
+    --auto-https)
+      AUTO_HTTPS=true
+      shift 1
+      ;;
+    --no-auto-https)
+      AUTO_HTTPS=false
       shift 1
       ;;
     *)
@@ -122,6 +131,18 @@ if [ -z "$EXPOSE_TRYTON" ]; then
       fi
     else
       EXPOSE_TRYTON=false
+    fi
+  fi
+fi
+
+# Respect existing auto-https choice if not overridden by CLI flags
+if [ -z "$AUTO_HTTPS" ]; then
+  if [ -f .env ]; then
+    EXISTING_AUTO_HTTPS=$(grep -E "^AUTO_HTTPS=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if [ "$EXISTING_AUTO_HTTPS" = "true" ]; then
+      AUTO_HTTPS=true
+    elif [ "$EXISTING_AUTO_HTTPS" = "false" ]; then
+      AUTO_HTTPS=false
     fi
   fi
 fi
@@ -250,6 +271,29 @@ if [ "${EXPOSE_TRYTON:-}" = true ]; then
   fi
 fi
 
+# Check if nginx is present
+NGINX_PRESENT=false
+if command -v nginx >/dev/null 2>&1 && [ -d /etc/nginx/sites-available ]; then
+  NGINX_PRESENT=true
+fi
+
+# Ask Auto-HTTPS question if port mode and nginx present and choice not resolved
+if [ "$PORT_MODE" = true ] && [ "$NGINX_PRESENT" = true ] && [ -z "${AUTO_HTTPS:-}" ]; then
+  echo ""
+  echo "Automatisch HTTPS für JaanOS einrichten?"
+  echo "Nutzt Ihren vorhandenen Webserver, fügt nur eine Adresse hinzu und ändert nichts Bestehendes."
+  CHOOSE_AUTO_HTTPS=$(ask "Automatisch HTTPS für JaanOS einrichten? (J/n): " "J")
+  if [[ "$CHOOSE_AUTO_HTTPS" =~ ^[Nn] ]]; then
+    AUTO_HTTPS=false
+  else
+    AUTO_HTTPS=true
+  fi
+fi
+
+if [ "$PORT_MODE" = false ] || [ "$NGINX_PRESENT" = false ]; then
+  AUTO_HTTPS=false
+fi
+
 # 4.7 If exposing Tryton, make sure the chosen port is free — otherwise pick the next
 # free one (a busy server may already use 8069, e.g. another Tryton/Odoo instance).
 if [ "${EXPOSE_TRYTON:-}" = true ] && command -v ss >/dev/null 2>&1; then
@@ -330,7 +374,7 @@ fi
 if [ -f .env ]; then
   echo "Existing .env file found. Preserving all keys."
   temp_file=$(mktemp)
-  grep -E -v "^(DOMAIN|INSTALL_MODE|APP_PORT|BUNDLED_TRYTON|BUNDLED_TRYTON_URL|BUNDLED_TRYTON_DB|BUNDLED_TRYTON_ADMIN_USER|BUNDLED_TRYTON_ADMIN_PASSWORD|COMPOSE_PROFILES|TRYTON_EXPOSE_PORT|COMPOSE_FILE)=" .env > "$temp_file" || true
+  grep -E -v "^(DOMAIN|INSTALL_MODE|APP_PORT|BUNDLED_TRYTON|BUNDLED_TRYTON_URL|BUNDLED_TRYTON_DB|BUNDLED_TRYTON_ADMIN_USER|BUNDLED_TRYTON_ADMIN_PASSWORD|COMPOSE_PROFILES|TRYTON_EXPOSE_PORT|COMPOSE_FILE|AUTO_HTTPS)=" .env > "$temp_file" || true
 
   echo "DOMAIN=${DOMAIN}" >> "$temp_file"
   if [ "$PORT_MODE" = true ]; then
@@ -358,6 +402,7 @@ if [ -f .env ]; then
     echo "COMPOSE_PROFILES=" >> "$temp_file"
     echo "COMPOSE_FILE=docker-compose.yml" >> "$temp_file"
   fi
+  echo "AUTO_HTTPS=${AUTO_HTTPS}" >> "$temp_file"
 
   mv "$temp_file" .env
 else
@@ -411,6 +456,7 @@ COMPOSE_PROFILES=
 COMPOSE_FILE=docker-compose.yml
 EOF
   fi
+  echo "AUTO_HTTPS=${AUTO_HTTPS}" >> .env
   chmod 600 .env
 fi
 echo -e "${GREEN}✓ Configuration saved in .env.${NC}"
@@ -467,6 +513,110 @@ for i in {1..12}; do
   fi
 done
 
+# 9.5 Auto-HTTPS setup for nginx if active
+if [ "$PORT_MODE" = true ] && [ "${AUTO_HTTPS:-}" = true ]; then
+  # 1. Install certbot and plugin if needed
+  if ! command -v certbot >/dev/null 2>&1 || ! dpkg -l | grep -q "python3-certbot-nginx" 2>/dev/null; then
+    echo -e "${BLUE}🔧 Installiere certbot und python3-certbot-nginx...${NC}"
+    if command -v apt-get >/dev/null 2>&1; then
+      export DEBIAN_FRONTEND=noninteractive
+      if apt-get update -y && apt-get install -y certbot python3-certbot-nginx; then
+        echo -e "${GREEN}✓ certbot wurde installiert.${NC}"
+      else
+        echo -e "${RED}⚠️ Installation von certbot fehlgeschlagen. Fallback auf HTTP-Port.${NC}"
+        AUTO_HTTPS=false
+      fi
+    else
+      echo -e "${RED}⚠️ apt-get nicht gefunden. Fallback auf HTTP-Port.${NC}"
+      AUTO_HTTPS=false
+    fi
+  fi
+
+  if [ "${AUTO_HTTPS:-}" = true ]; then
+    # 2. Determine domain
+    AUTO_HTTPS_DOMAIN="$DOMAIN"
+    if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      AUTO_HTTPS_DOMAIN="$(echo "$DOMAIN" | tr '.' '-').sslip.io"
+    fi
+    
+    echo -e "${BLUE}🌐 Konfiguriere nginx für ${AUTO_HTTPS_DOMAIN}...${NC}"
+    
+    # Ensure directories exist
+    mkdir -p /etc/nginx/sites-available
+    mkdir -p /etc/nginx/sites-enabled
+    
+    # 3. Create Nginx virtual host
+    cat <<NGINXTMPL > /etc/nginx/sites-available/jaanos
+server {
+    listen 80;
+    server_name ${AUTO_HTTPS_DOMAIN};
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+    }
+}
+NGINXTMPL
+
+    ln -sf /etc/nginx/sites-available/jaanos /etc/nginx/sites-enabled/jaanos
+
+    # 4. Validate nginx configuration VOR reload
+    if ! nginx -t >/dev/null 2>&1; then
+      echo -e "${RED}⚠️ Nginx-Konfigurationstest fehlgeschlagen! Rollback wird ausgeführt...${NC}"
+      rm -f /etc/nginx/sites-available/jaanos
+      rm -f /etc/nginx/sites-enabled/jaanos
+      AUTO_HTTPS=false
+    else
+      # Reload nginx
+      if ! systemctl reload nginx >/dev/null 2>&1; then
+        echo -e "${RED}⚠️ Nginx-Reload fehlgeschlagen! Rollback wird ausgeführt...${NC}"
+        rm -f /etc/nginx/sites-available/jaanos
+        rm -f /etc/nginx/sites-enabled/jaanos
+        AUTO_HTTPS=false
+      else
+        echo -e "${GREEN}✓ Nginx-Konfiguration erfolgreich geladen.${NC}"
+        
+        # 5. Run certbot
+        echo -e "${BLUE}🔒 Starte certbot für ${AUTO_HTTPS_DOMAIN}...${NC}"
+        if certbot --nginx -d "${AUTO_HTTPS_DOMAIN}" --non-interactive --agree-tos --register-unsafely-without-email --redirect; then
+          echo -e "${GREEN}✓ HTTPS erfolgreich eingerichtet!${NC}"
+          
+          # 6. Update .env with new domain and compose config
+          DOMAIN="${AUTO_HTTPS_DOMAIN}"
+          sed -i "s|^DOMAIN=.*|DOMAIN=${AUTO_HTTPS_DOMAIN}|g" .env
+          if grep -q "^AUTO_HTTPS=" .env; then
+            sed -i "s|^AUTO_HTTPS=.*|AUTO_HTTPS=true|g" .env
+          else
+            echo "AUTO_HTTPS=true" >> .env
+          fi
+          
+          # Update docker-compose.yml environment variables to match HTTPS
+          # shellcheck disable=SC2016
+          sed -i 's|NEXT_PUBLIC_APP_URL=http://${DOMAIN}:${APP_PORT}|NEXT_PUBLIC_APP_URL=https://${DOMAIN}|g' docker-compose.yml
+          # shellcheck disable=SC2016
+          sed -i 's|AUTH_URL=http://${DOMAIN}:${APP_PORT}/api/auth|AUTH_URL=https://${DOMAIN}/api/auth|g' docker-compose.yml
+          
+          # Relaunch compose to apply new configuration
+          echo -e "${BLUE}♻️ Starte Container neu mit HTTPS-Konfiguration...${NC}"
+          docker compose up -d
+        else
+          echo -e "${RED}⚠️ Certbot-Fehler. Fallback auf HTTP-Port.${NC}"
+          rm -f /etc/nginx/sites-available/jaanos
+          rm -f /etc/nginx/sites-enabled/jaanos
+          systemctl reload nginx >/dev/null 2>&1 || true
+          AUTO_HTTPS=false
+          if grep -q "^AUTO_HTTPS=" .env; then
+            sed -i "s|^AUTO_HTTPS=.*|AUTO_HTTPS=false|g" .env
+          else
+            echo "AUTO_HTTPS=false" >> .env
+          fi
+        fi
+      fi
+    fi
+  fi
+fi
+
 # Port mode: ship a ready-to-use vhost template for the user's existing web server,
 # with the actual chosen port already filled in — completing HTTPS is ONE step,
 # not a reinstall (this installation is full-featured and permanent as-is).
@@ -498,7 +648,11 @@ fi
 
 echo ""
 if [ "$PORT_MODE" = true ]; then
-  ACCESS_URL="http://${DOMAIN}:${APP_PORT}"
+  if [ "${AUTO_HTTPS:-}" = true ]; then
+    ACCESS_URL="https://${DOMAIN}"
+  else
+    ACCESS_URL="http://${DOMAIN}:${APP_PORT}"
+  fi
 else
   ACCESS_URL="https://${DOMAIN}"
 fi
@@ -519,7 +673,7 @@ if [ "$WITH_TRYTON" = true ]; then
   fi
   echo ""
 fi
-if [ "$PORT_MODE" = true ]; then
+if [ "$PORT_MODE" = true ] && [ "${AUTO_HTTPS:-}" != true ]; then
   echo "    Die Verbindung ist noch nicht verschlüsselt. Solange Sie JaanOS im eigenen"
   echo "    Netz nutzen, ist alles gut; für den öffentlichen Zugriff später absichern."
 elif [ "$EXPOSE_TRYTON" = true ]; then
