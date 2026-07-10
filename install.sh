@@ -472,44 +472,34 @@ server {
 NGINXEOF
 fi
 
-echo "================================================="
+echo ""
 if [ "$PORT_MODE" = true ]; then
-  echo -e "${GREEN}🎉 Geschafft! JaanOS läuft.${NC}"
-  echo ""
-  echo -e "   Jetzt im Browser öffnen:   ${BLUE}http://${DOMAIN}:${APP_PORT}${NC}"
-  if [ "$WITH_TRYTON" = true ]; then
-    echo ""
-    echo "   Ihr ERP wird im Hintergrund eingerichtet (ein paar Minuten). Sie können"
-    echo "   sich schon registrieren und es dann mit einem Klick verbinden."
-  fi
-  if [ "$EXPOSE_TRYTON" = true ]; then
-    echo ""
-    echo -e "   Tryton direkt:             ${BLUE}http://${DOMAIN}:${TRYTON_EXPOSE_PORT}${NC}"
-    echo "   (Benutzer: admin · Passwort: grep BUNDLED_TRYTON_ADMIN_PASSWORD /opt/jaanos/.env · DB: tryton)"
-  elif [ "$WITH_TRYTON" = true ]; then
-    echo ""
-    echo "   Tipp: Tryton direkt öffnen? Später:  bash install.sh --expose-tryton 8069"
-  fi
-  echo ""
-  echo "   Läuft unverschlüsselt (HTTP) — ideal zum Testen und im eigenen Netz."
-  echo "   Für den Dauerbetrieb übers Internet später mit SSL absichern (siehe Doku)."
+  ACCESS_URL="http://${DOMAIN}:${APP_PORT}"
 else
-  echo -e "${GREEN}🎉 Geschafft! JaanOS läuft.${NC}"
-  echo ""
-  echo -e "   Jetzt im Browser öffnen:   ${BLUE}https://${DOMAIN}${NC}"
-  if [ "$WITH_TRYTON" = true ]; then
-    echo ""
-    echo "   Ihr ERP wird im Hintergrund eingerichtet (ein paar Minuten). Sie können"
-    echo "   sich schon registrieren und es dann mit einem Klick verbinden."
-  fi
-  if [ "$EXPOSE_TRYTON" = true ]; then
-    echo ""
-    echo -e "   Tryton direkt:             ${BLUE}http://${DOMAIN}:${TRYTON_EXPOSE_PORT}${NC}"
-    echo "   (Benutzer: admin · Passwort: grep BUNDLED_TRYTON_ADMIN_PASSWORD /opt/jaanos/.env · DB: tryton)"
-    echo "   Offener Port — für Dauerbetrieb übers Internet mit SSL absichern."
-  elif [ "$WITH_TRYTON" = true ]; then
-    echo ""
-    echo "   Tipp: Tryton direkt öffnen? Später:  bash install.sh --expose-tryton 8069"
-  fi
+  ACCESS_URL="https://${DOMAIN}"
 fi
-echo "================================================="
+
+echo -e "  ${GREEN}JaanOS ist bereit.${NC}"
+echo ""
+echo -e "    Oberfläche        ${BLUE}${ACCESS_URL}${NC}"
+if [ "$EXPOSE_TRYTON" = true ]; then
+  echo -e "    Tryton            ${BLUE}http://${DOMAIN}:${TRYTON_EXPOSE_PORT}${NC}"
+  echo    "                      Benutzer admin · Passwort in /opt/jaanos/.env · Datenbank tryton"
+fi
+echo ""
+if [ "$WITH_TRYTON" = true ]; then
+  echo "    Das ERP wird im Hintergrund eingerichtet. Sie können sich bereits anmelden"
+  echo "    und es anschließend in einem Schritt verbinden."
+  if [ "$EXPOSE_TRYTON" != true ]; then
+    echo "    Direkter Tryton-Zugang jederzeit:  bash install.sh --expose-tryton 8069"
+  fi
+  echo ""
+fi
+if [ "$PORT_MODE" = true ]; then
+  echo "    Die Verbindung läuft über HTTP. Für den Zugriff aus dem Internet ergänzen"
+  echo "    Sie TLS — die Schritte stehen in der Dokumentation."
+elif [ "$EXPOSE_TRYTON" = true ]; then
+  echo "    Der direkte Tryton-Zugang läuft über HTTP. Für den Zugriff aus dem Internet"
+  echo "    ergänzen Sie dort TLS — die Schritte stehen in der Dokumentation."
+fi
+echo ""
