@@ -663,6 +663,17 @@ NGINXSSL
       # Direct Tryton access over HTTPS too — appended only when its cert exists.
       # (The port-80 block keeps serving the ACME challenge so renewals keep working.)
       if [ "${TRYTON_HTTPS_OK:-}" = true ]; then
+        # Tryton is now reachable over HTTPS; nginx proxies via 127.0.0.1, so bind
+        # the raw ERP port to localhost only — the unencrypted port is no longer
+        # exposed to the internet. (docker compose up -d below applies it.)
+        if [ -f docker-compose.expose.yml ]; then
+          cat > docker-compose.expose.yml <<'EXPOSELOCAL'
+services:
+  tryton:
+    ports:
+      - "127.0.0.1:${TRYTON_EXPOSE_PORT:-8069}:8000"
+EXPOSELOCAL
+        fi
         cat <<NGINXTRYTON >> /etc/nginx/sites-available/jaanos
 server {
     listen 80;
